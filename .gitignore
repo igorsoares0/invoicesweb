@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# env example is safe to commit
+!.env.example
+
+# prisma client (generated)
+/src/generated
+
+# e2e reports
+/playwright-report/
+/test-results/
