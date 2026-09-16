@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, vi } from "vitest";
 import { db } from "@/server/db";
 import { resetRateLimits } from "@/server/auth/rate-limit";
+import { closePdfRenderer } from "@/server/pdf/pdf-renderer";
 import { authState } from "./auth-state";
 import { truncateAll } from "./db";
 
@@ -26,5 +27,6 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  await closePdfRenderer();
   await db.$disconnect();
 });

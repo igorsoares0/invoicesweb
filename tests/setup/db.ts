@@ -8,7 +8,7 @@ export async function truncateAll() {
     throw new Error("Refusing to truncate: DATABASE_URL does not point at a *_test database.");
   }
   await db.$executeRawUnsafe(
-    'TRUNCATE TABLE "Product", "Client", "Business", "Account", "Session", "VerificationToken", "User" CASCADE',
+    'TRUNCATE TABLE "InvoiceEvent", "Payment", "InvoiceItem", "Invoice", "Product", "Client", "Business", "Account", "Session", "VerificationToken", "User" CASCADE',
   );
 }
 
@@ -45,4 +45,19 @@ export function createProductRecord(
   data: { name: string; unitPrice?: string; description?: string },
 ) {
   return db.product.create({ data: { businessId, unitPrice: "100.00", ...data } });
+}
+
+/** A line as the editor sends it. */
+export function lineInput(overrides: Record<string, unknown> = {}) {
+  return {
+    id: `line_${Math.random().toString(36).slice(2, 12)}`,
+    description: "Website redesign — discovery & IA",
+    quantity: "1",
+    unitPrice: "2400",
+    discountType: null,
+    discountValue: null,
+    taxRate: "0",
+    taxExempt: false,
+    ...overrides,
+  };
 }

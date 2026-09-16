@@ -30,13 +30,36 @@ export async function createAccount(options: { businessName?: string | null; ema
     [userId, email, passwordHash],
   );
   const businessName = options.businessName === undefined ? "Alvorada Studio" : options.businessName;
+  const businessId = businessName ? `e2e${randomUUID().replaceAll("-", "")}` : null;
   if (businessName) {
     await db.query(
-      `INSERT INTO "Business" (id, "userId", name, "createdAt", "updatedAt") VALUES ($1, $2, $3, now(), now())`,
-      [`e2e${randomUUID().replaceAll("-", "")}`, userId, businessName],
+      `INSERT INTO "Business" (id, "userId", name, email, "paymentInstructions", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, now(), now())`,
+      [businessId, userId, businessName, "hello@alvorada.studio", "Bank transfer — IBAN PT50 0002 0123 1234 5678 9015 4"],
     );
   }
-  return { email, password: TEST_PASSWORD, userId };
+  return { email, password: TEST_PASSWORD, userId, businessId: businessId! };
+}
+
+const id = () => `e2e${randomUUID().replaceAll("-", "")}`;
+
+export async function createClient(businessId: string, data: { name: string; email?: string }) {
+  const clientId = id();
+  await getPool().query(
+    `INSERT INTO "Client" (id, "businessId", name, email, "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, now(), now())`,
+    [clientId, businessId, data.name, data.email ?? null],
+  );
+  return clientId;
+}
+
+export async function createProduct(businessId: string, data: { name: string; unitPrice: string; taxRate?: string }) {
+  const productId = id();
+  await getPool().query(
+    `INSERT INTO "Product" (id, "businessId", name, "unitPrice", "taxRate", "createdAt", "updatedAt")
+     VALUES ($1, $2, $3, $4, $5, now(), now())`,
+    [productId, businessId, data.name, data.unitPrice, data.taxRate ?? "0"],
+  );
+  return productId;
 }
 
 export async function closePool() {

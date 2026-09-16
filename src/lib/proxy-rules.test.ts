@@ -7,6 +7,12 @@ describe("signInRedirectFor", () => {
     expect(signInRedirectFor("/sign-up", "", [])).toBeNull();
   });
 
+  it("keeps public invoice and estimate links open", () => {
+    expect(signInRedirectFor("/i/inv_ABC", "", [])).toBeNull();
+    expect(signInRedirectFor("/i/inv_ABC/pdf", "", [])).toBeNull();
+    expect(signInRedirectFor("/invoices", "", [])).not.toBeNull();
+  });
+
   it("redirects app pages to sign-in and remembers where the user was going", () => {
     expect(signInRedirectFor("/clients", "?q=pine", [])).toBe("/sign-in?callbackUrl=%2Fclients%3Fq%3Dpine");
     expect(signInRedirectFor("/overview", "", ["theme"])).toBe("/sign-in");

@@ -34,7 +34,7 @@ test.describe("authentication", () => {
 
     await expect(page).toHaveURL(/\/overview$/);
     await expect(page.getByTestId("business-chip")).toContainText("Halcyon Labs");
-    await expect(page.getByText("your first one will be INV-0001")).toBeVisible();
+    await expect(page.getByText("No invoices yet")).toBeVisible();
 
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/sign-in$/);

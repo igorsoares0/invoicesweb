@@ -18,6 +18,8 @@ export interface HandlerContext<TMode extends AuthMode, TParams> {
   params: TParams;
   /** Parses the JSON body; services validate its shape. */
   json(): Promise<unknown>;
+  /** Like json(), but an empty body yields `undefined` (for actions whose body is optional). */
+  optionalJson(): Promise<unknown>;
   /** Query string as a plain object; services validate its shape. */
   query: Record<string, string>;
 }
@@ -55,6 +57,15 @@ export function withApi<TMode extends AuthMode, TParams = Record<string, never>>
         async json() {
           try {
             return await request.json();
+          } catch {
+            throw ApiError.validation({ _form: ["Request body must be valid JSON"] });
+          }
+        },
+        async optionalJson() {
+          const text = await request.text();
+          if (!text.trim()) return undefined;
+          try {
+            return JSON.parse(text);
           } catch {
             throw ApiError.validation({ _form: ["Request body must be valid JSON"] });
           }

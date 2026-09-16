@@ -66,9 +66,13 @@ const FIFTEEN_MINUTES = 15 * 60 * 1000;
 export const signInLimiter = createRateLimiter({ limit: 5, windowMs: FIFTEEN_MINUTES });
 export const signUpLimiter = createRateLimiter({ limit: 10, windowMs: FIFTEEN_MINUTES });
 
+/** Public document links: page views and PDF downloads per IP. */
+export const publicDocumentLimiter = createRateLimiter({ limit: 60, windowMs: 60 * 1000 });
+
 export function resetRateLimits() {
   signInLimiter.clear();
   signUpLimiter.clear();
+  publicDocumentLimiter.clear();
 }
 
 /** Best-effort client IP. Only trustworthy behind a reverse proxy that overwrites the header. */

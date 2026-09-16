@@ -44,6 +44,7 @@ export interface BusinessDto {
   invoiceNextNumber: number;
   estimatePrefix: string;
   estimateNextNumber: number;
+  paymentInstructions: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -96,4 +97,118 @@ export interface MeDto {
   business: BusinessDto | null;
   subscription: { plan: Plan; status: "ACTIVE" };
   entitlements: Entitlements;
+}
+
+export type InvoiceStatus = "DRAFT" | "SENT" | "VIEWED" | "PARTIALLY_PAID" | "PAID" | "CANCELLED";
+export type DisplayInvoiceStatus = InvoiceStatus | "OVERDUE";
+export type DocumentTemplate = "MODERN" | "CLASSIC" | "MINIMAL" | "PROFESSIONAL" | "BOLD";
+export type PaymentMethod = "BANK_TRANSFER" | "CARD" | "CASH" | "PAYPAL" | "OTHER";
+export type InvoiceEventType =
+  | "CREATED"
+  | "UPDATED"
+  | "SENT"
+  | "VIEWED"
+  | "PAYMENT_ADDED"
+  | "PAYMENT_REMOVED"
+  | "CANCELLED"
+  | "LINK_REVOKED"
+  | "DUPLICATED";
+
+export interface InvoiceItemDto {
+  id: string;
+  productId: string | null;
+  position: number;
+  description: string;
+  quantity: string;
+  unitPrice: string | null;
+  discountType: "PERCENT" | "FIXED" | null;
+  discountValue: string | null;
+  taxRate: string;
+  taxExempt: boolean;
+  taxExemptReason: string | null;
+  subtotal: string;
+  discount: string;
+  tax: string;
+  total: string;
+}
+
+export interface PaymentDto {
+  id: string;
+  amount: string;
+  currency: string;
+  paymentDate: string;
+  method: PaymentMethod;
+  reference: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface InvoiceEventDto {
+  id: string;
+  type: InvoiceEventType;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface InvoiceIssueDto {
+  path: string;
+  summary: string;
+  fix: string;
+  message: string;
+}
+
+export interface InvoiceClientDto {
+  id: string;
+  name: string;
+  email: string | null;
+  deleted: boolean;
+}
+
+export interface InvoiceListItemDto {
+  id: string;
+  number: string;
+  status: InvoiceStatus;
+  displayStatus: DisplayInvoiceStatus;
+  issueDate: string;
+  dueDate: string;
+  currency: string;
+  total: string;
+  amountDue: string;
+  client: { id: string; name: string } | null;
+  /** First line's description, for the "Client · Description" column. */
+  summary: string | null;
+  createdAt: string;
+}
+
+export interface InvoiceDto extends Omit<InvoiceListItemDto, "client" | "summary"> {
+  sequence: number;
+  client: InvoiceClientDto | null;
+  subtotal: string;
+  discount: string;
+  tax: string;
+  amountPaid: string;
+  notes: string | null;
+  terms: string | null;
+  template: DocumentTemplate;
+  color: string;
+  publicToken: string | null;
+  sentAt: string | null;
+  viewedAt: string | null;
+  cancelledAt: string | null;
+  items: InvoiceItemDto[];
+  payments: PaymentDto[];
+  events: InvoiceEventDto[];
+  /** What blocks sending and the PDF; empty when ready. */
+  issues: InvoiceIssueDto[];
+  updatedAt: string;
+}
+
+export interface DashboardDto {
+  currency: string;
+  /** Other currencies with invoices; each is reported on its own, never converted. */
+  otherCurrencies: string[];
+  paidThisMonth: { amount: string; previousMonth: string };
+  outstanding: { amount: string; count: number };
+  overdue: { amount: string; count: number; oldestDays: number | null };
+  averageDaysToPay: number | null;
 }

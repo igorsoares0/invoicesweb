@@ -52,6 +52,7 @@ export const updateBusinessSchema = z
     invoiceNextNumber: sequenceNumber,
     estimatePrefix: documentPrefix,
     estimateNextNumber: sequenceNumber,
+    paymentInstructions: optionalText(1000),
   })
   .partial();
 

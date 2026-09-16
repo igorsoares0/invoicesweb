@@ -128,3 +128,19 @@ describe("GET /api/v1/me", () => {
     expect((await callRoute(getMe)).status).toBe(401);
   });
 });
+
+describe("invoice numbering in settings", () => {
+  it("refuses to move the next number back onto one that's already used", async () => {
+    const { user, business } = await createAccount();
+    signInAs(user.id);
+    await db.business.update({ where: { id: business.id }, data: { invoiceNextNumber: 45 } });
+    const { POST: createInvoice } = await import("../invoices/route");
+    await callRoute(createInvoice, { method: "POST" });
+
+    const back = await callRoute(PATCH, { method: "PATCH", body: { invoiceNextNumber: 45 } });
+    expect(back.status).toBe(422);
+    expect(back.json.error.details.invoiceNextNumber[0]).toBe("Must be 46 or more — 45 is already used");
+
+    expect((await callRoute(PATCH, { method: "PATCH", body: { invoiceNextNumber: 100 } })).status).toBe(200);
+  });
+});

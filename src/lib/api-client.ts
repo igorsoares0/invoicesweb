@@ -21,12 +21,23 @@ export class ApiClientError extends Error {
 
 type Method = "GET" | "POST" | "PATCH" | "DELETE";
 
-async function request<T>(method: Method, path: string, body?: unknown, fetchImpl: typeof fetch = fetch): Promise<T> {
+interface RequestOptions {
+  headers?: Record<string, string>;
+}
+
+async function request<T>(
+  method: Method,
+  path: string,
+  body?: unknown,
+  fetchImpl: typeof fetch = fetch,
+  options: RequestOptions = {},
+): Promise<T> {
   let response: Response;
   try {
+    const headers = { ...(body === undefined ? {} : { "content-type": "application/json" }), ...options.headers };
     response = await fetchImpl(`/api/v1${path}`, {
       method,
-      headers: body === undefined ? undefined : { "content-type": "application/json" },
+      headers: Object.keys(headers).length ? headers : undefined,
       body: body === undefined ? undefined : JSON.stringify(body),
       credentials: "same-origin",
     });
@@ -58,14 +69,16 @@ export function createApiClient(fetchImpl?: typeof fetch) {
     list<T>(path: string): Promise<ApiList<T>> {
       return request<ApiList<T>>("GET", path, undefined, fetchImpl);
     },
-    async post<T>(path: string, body: unknown): Promise<T> {
-      return (await request<{ data: T }>("POST", path, body, fetchImpl)).data;
+    async post<T>(path: string, body: unknown, options?: RequestOptions): Promise<T> {
+      return (await request<{ data: T }>("POST", path, body, fetchImpl, options)).data;
     },
     async patch<T>(path: string, body: unknown): Promise<T> {
       return (await request<{ data: T }>("PATCH", path, body, fetchImpl)).data;
     },
-    async delete(path: string): Promise<void> {
-      await request<void>("DELETE", path, undefined, fetchImpl);
+    /** Resolves with the response's `data` when there is one (some deletes return the updated parent). */
+    async delete<T = void>(path: string): Promise<T> {
+      const payload = await request<{ data: T } | undefined>("DELETE", path, undefined, fetchImpl);
+      return payload?.data as T;
     },
   };
 }

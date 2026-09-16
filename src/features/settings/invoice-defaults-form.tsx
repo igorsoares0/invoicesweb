@@ -8,6 +8,7 @@ import { errorProps, Field } from "@/components/forms/field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
 import { useApiForm } from "@/hooks/use-api-form";
 import { api } from "@/lib/api-client";
 import type { BusinessDto } from "@/lib/api-types";
@@ -42,6 +43,7 @@ export function InvoiceDefaultsForm({ business }: { business: BusinessDto }) {
       defaultTaxRate: defaultTaxRate === "" ? null : defaultTaxRate,
       paymentTermsDays: value("paymentTermsDays"),
       timezone: value("timezone"),
+      paymentInstructions: value("paymentInstructions"),
     };
     if (await submit(() => api.patch<BusinessDto>("/business", body))) {
       toast.success("Invoice defaults saved");
@@ -146,6 +148,22 @@ export function InvoiceDefaultsForm({ business }: { business: BusinessDto }) {
             </NativeSelect>
           </Field>
         </div>
+
+        <Field
+          id="paymentInstructions"
+          label="Payment instructions"
+          error={error("paymentInstructions")}
+          hint="Printed on every invoice under “How to pay” — bank details, IBAN or a payment link. Clients can copy an IBAN on their phone."
+        >
+          <Textarea
+            id="paymentInstructions"
+            name="paymentInstructions"
+            rows={3}
+            placeholder="Bank transfer — IBAN PT50 0002 0123 1234 5678 9015 4. Please reference the invoice number."
+            defaultValue={business.paymentInstructions ?? ""}
+            {...errorProps("paymentInstructions", error("paymentInstructions"))}
+          />
+        </Field>
 
         <div
           className="flex flex-col gap-1 rounded-md border bg-canvas-2 px-4 py-2.5 text-[13px] sm:flex-row sm:items-center sm:gap-6"

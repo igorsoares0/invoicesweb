@@ -21,6 +21,15 @@ describe("api client", () => {
     });
   });
 
+  it("sends extra headers such as an idempotency key", async () => {
+    const fetchImpl = mockFetch(201, { data: {} });
+    await createApiClient(fetchImpl).post("/invoices/i1/payments", { amount: "1" }, { headers: { "idempotency-key": "k-12345678" } });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/api/v1/invoices/i1/payments",
+      expect.objectContaining({ headers: { "content-type": "application/json", "idempotency-key": "k-12345678" } }),
+    );
+  });
+
   it("keeps pagination for lists", async () => {
     const client = createApiClient(mockFetch(200, { data: [], pagination: { page: 1, limit: 20, total: 0 } }));
     await expect(client.list("/clients")).resolves.toEqual({ data: [], pagination: { page: 1, limit: 20, total: 0 } });

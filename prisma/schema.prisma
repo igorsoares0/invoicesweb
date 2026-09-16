@@ -95,12 +95,16 @@ model Business {
   estimatePrefix     String @default("EST-")
   estimateNextNumber Int    @default(1)
 
+  // Printed on every document: bank details, IBAN, payment links.
+  paymentInstructions String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   clients  Client[]
   products Product[]
+  invoices Invoice[]
 }
 
 model Client {
@@ -124,7 +128,8 @@ model Client {
   // Soft delete: invoices keep referencing clients that were removed from the list.
   deletedAt DateTime?
 
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  invoices Invoice[]
 
   @@index([businessId, name])
   @@index([businessId, email])
@@ -146,7 +151,162 @@ model Product {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  invoiceItems InvoiceItem[]
 
   @@index([businessId, name])
+}
+
+// ---------------------------------------------------------------------------
+// Invoicing
+// ---------------------------------------------------------------------------
+
+/// Persisted lifecycle. OVERDUE is derived when reading (a past due date with a balance), never stored.
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  VIEWED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+enum DocumentTemplate {
+  MODERN
+  CLASSIC
+  MINIMAL
+  PROFESSIONAL
+  BOLD
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CARD
+  PAYPAL
+  OTHER
+}
+
+enum InvoiceEventType {
+  CREATED
+  UPDATED
+  SENT
+  VIEWED
+  PAYMENT_ADDED
+  PAYMENT_REMOVED
+  CANCELLED
+  LINK_REVOKED
+  DUPLICATED
+}
+
+model Invoice {
+  id         String        @id @default(cuid())
+  businessId String
+  clientId   String?
+  /// Position in the business's continuous sequence; `number` is its formatted label.
+  sequence   Int
+  number     String
+  status     InvoiceStatus @default(DRAFT)
+  issueDate  DateTime      @db.Date
+  dueDate    DateTime      @db.Date
+  currency   String
+
+  // Calculated on the server and persisted, so history never changes.
+  subtotal   Decimal @default(0) @db.Decimal(12, 2)
+  discount   Decimal @default(0) @db.Decimal(12, 2)
+  tax        Decimal @default(0) @db.Decimal(12, 2)
+  total      Decimal @default(0) @db.Decimal(12, 2)
+  amountPaid Decimal @default(0) @db.Decimal(12, 2)
+  amountDue  Decimal @default(0) @db.Decimal(12, 2)
+
+  notes    String?
+  terms    String?
+  template DocumentTemplate @default(MODERN)
+  color    String           @default("#1e40af")
+
+  publicToken String?   @unique
+  sentAt      DateTime?
+  viewedAt    DateTime?
+  cancelledAt DateTime?
+
+  /// Business and client as they were when the invoice was sent. Drafts render live data.
+  issuerSnapshot Json?
+  billToSnapshot Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  business Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  client   Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  items    InvoiceItem[]
+  payments Payment[]
+  events   InvoiceEvent[]
+
+  @@unique([businessId, sequence])
+  @@index([businessId, status])
+  @@index([businessId, dueDate])
+  @@index([clientId])
+}
+
+model InvoiceItem {
+  id        String  @id @default(cuid())
+  invoiceId String
+  productId String?
+  position  Int
+
+  description     String
+  quantity        Decimal       @default(1) @db.Decimal(12, 3)
+  /// Null while a draft line has no price yet; sending requires one.
+  unitPrice       Decimal?      @db.Decimal(12, 2)
+  discountType    DiscountType?
+  discountValue   Decimal?      @db.Decimal(12, 2)
+  taxRate         Decimal       @default(0) @db.Decimal(5, 2)
+  taxExempt       Boolean       @default(false)
+  taxExemptReason String?
+
+  subtotal Decimal @default(0) @db.Decimal(12, 2)
+  discount Decimal @default(0) @db.Decimal(12, 2)
+  tax      Decimal @default(0) @db.Decimal(12, 2)
+  total    Decimal @default(0) @db.Decimal(12, 2)
+
+  invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId, position])
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  invoiceId      String
+  amount         Decimal       @db.Decimal(12, 2)
+  currency       String
+  paymentDate    DateTime      @db.Date
+  method         PaymentMethod
+  reference      String?
+  notes          String?
+  /// Optional client-supplied key so retries don't record the same payment twice.
+  idempotencyKey String?
+  createdAt      DateTime      @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@unique([invoiceId, idempotencyKey])
+  @@index([invoiceId])
+}
+
+model InvoiceEvent {
+  id        String           @id @default(cuid())
+  invoiceId String
+  type      InvoiceEventType
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId, createdAt])
 }

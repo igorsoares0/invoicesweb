@@ -27,3 +27,16 @@ export function formatPercent(value: string): string {
   const normalized = normalizeDecimal(value).replace(/\.?0+$/, "");
   return `${normalized}%`;
 }
+
+/** Grouped number without a currency sign: "2400.5" → "2,400.50". */
+export function formatAmount(amount: string, locale = "en-US"): string {
+  const [whole, fraction] = normalizeDecimal(amount).split(".");
+  const grouped = new Intl.NumberFormat(locale).format(BigInt(whole));
+  const separator = new Intl.NumberFormat(locale).formatToParts(1.1).find((part) => part.type === "decimal")?.value ?? ".";
+  return `${grouped}${separator}${fraction}`;
+}
+
+/** "1.500" → "1.5", "12" → "12". */
+export function formatQuantity(quantity: string): string {
+  return quantity.includes(".") ? quantity.replace(/\.?0+$/, "") : quantity;
+}

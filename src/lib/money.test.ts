@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMoney, formatPercent, MONEY_PATTERN, normalizeDecimal } from "./money";
+import { formatAmount, formatMoney, formatPercent, formatQuantity, MONEY_PATTERN, normalizeDecimal } from "./money";
 
 describe("normalizeDecimal", () => {
   it.each([
@@ -43,5 +43,18 @@ describe("formatPercent", () => {
     expect(formatPercent("23.00")).toBe("23%");
     expect(formatPercent("6.50")).toBe("6.5%");
     expect(formatPercent("0.00")).toBe("0%");
+  });
+});
+
+describe("formatAmount and formatQuantity", () => {
+  it("groups without a currency sign", () => {
+    expect(formatAmount("2400")).toBe("2,400.00");
+    expect(formatAmount("140.5", "de-DE")).toBe("140,50");
+  });
+
+  it("trims trailing zeros from quantities", () => {
+    expect(formatQuantity("1.500")).toBe("1.5");
+    expect(formatQuantity("12")).toBe("12");
+    expect(formatQuantity("2.000")).toBe("2");
   });
 });
