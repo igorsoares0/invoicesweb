@@ -1,5 +1,7 @@
 # Invoice Maker — Spec-Driven Development
 
+> **Decisões de implementação:** onde o código se afasta desta spec ou vai além dela, o registro está em [`decisions.md`](decisions.md). Em caso de conflito, `decisions.md` prevalece.
+
 ## 1. Visão do Produto
 
 Invoice Maker é um SaaS de criação e gerenciamento de invoices e estimates voltado principalmente para:
