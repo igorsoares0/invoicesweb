@@ -11,8 +11,8 @@ import { useApiForm } from "@/hooks/use-api-form";
 import { api } from "@/lib/api-client";
 import type { InvoiceDto, PaymentMethod } from "@/lib/api-types";
 import { currencySymbol } from "@/lib/currencies";
-import { parseMoneyInput } from "@/lib/invoices/line-text";
-import { compareMoney, subtractMoney } from "@/lib/invoices/math";
+import { parseMoneyInput } from "@/lib/documents/line-text";
+import { compareMoney, subtractMoney } from "@/lib/documents/math";
 import { formatAmount, formatMoney } from "@/lib/money";
 import { PAYMENT_METHODS } from "@/lib/validation/invoice";
 

@@ -1,7 +1,7 @@
 import "server-only";
 import type { InvoiceDto } from "@/lib/api-types";
 import { fromIsoDate, todayIn } from "@/lib/dates";
-import { addMoney, compareMoney, subtractMoney } from "@/lib/invoices/math";
+import { addMoney, compareMoney, subtractMoney } from "@/lib/documents/math";
 import { statusAfterPayment } from "@/lib/invoices/status";
 import { formatMoney } from "@/lib/money";
 import { toFieldErrors } from "@/lib/validation/errors";

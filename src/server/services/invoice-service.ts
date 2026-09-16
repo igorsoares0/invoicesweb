@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import type { Prisma } from "@/generated/prisma/client";
 import type { ApiList, InvoiceDto, InvoiceListItemDto } from "@/lib/api-types";
 import { addDays, fromIsoDate, todayIn, toIsoDate } from "@/lib/dates";
-import { findIssueProblems, problemsToFieldErrors } from "@/lib/invoices/issues";
-import { calculateLine, calculateTotals, subtractMoney } from "@/lib/invoices/math";
+import { findIssueProblems, problemsToFieldErrors } from "@/lib/documents/issues";
+import { calculateTotals, subtractMoney } from "@/lib/documents/math";
 import { canPerform, type InvoiceAction } from "@/lib/invoices/status";
 import { formatDocumentNumber } from "@/lib/numbering";
 import { toFieldErrors } from "@/lib/validation/errors";
@@ -12,15 +12,15 @@ import {
   createInvoiceSchema,
   listInvoicesQuerySchema,
   updateInvoiceSchema,
-  type InvoiceItemInput,
 } from "@/lib/validation/invoice";
 import { ApiError, ErrorCode } from "@/server/api/errors";
 import type { BusinessContext } from "@/server/auth/types";
 import { db } from "@/server/db";
-import { documentParties, invoiceViewFrom, renderInvoicePdf } from "@/server/invoices/document";
-import { generatePublicToken } from "@/server/invoices/public-token";
+import { documentItemRow } from "@/server/documents/lines";
+import { documentParties, invoiceViewFrom, renderDocumentPdf } from "@/server/documents/render";
+import { generatePublicToken } from "@/server/documents/public-token";
 import { toInvoiceDto, toInvoiceListItemDto, toItemDto, toLineInput } from "@/server/invoices/serializers";
-import { billToSnapshot, issuerSnapshot } from "@/server/invoices/snapshots";
+import { billToSnapshot, issuerSnapshot } from "@/server/documents/snapshots";
 import { businessRepository } from "@/server/repositories/business-repository";
 import { invoiceRepository, type InvoiceDetail, type Tx } from "@/server/repositories/invoice-repository";
 import { isPrismaError } from "@/server/repositories/prisma-errors";
@@ -45,32 +45,6 @@ export function assertCan(invoice: { status: InvoiceDetail["status"] }, action: 
 export async function businessToday(businessId: string) {
   const business = await businessRepository.findById(businessId);
   return { business, today: todayIn(business.timezone) };
-}
-
-/** Data for one line row, with its amounts computed on the server. */
-function itemRow(item: InvoiceItemInput, position: number): Omit<Prisma.InvoiceItemCreateManyInput, "invoiceId"> {
-  const amounts = calculateLine({
-    quantity: item.quantity,
-    unitPrice: item.unitPrice,
-    discountType: item.discountType,
-    discountValue: item.discountValue,
-    taxRate: item.taxRate,
-    taxExempt: item.taxExempt,
-  });
-  return {
-    id: item.id,
-    productId: item.productId ?? null,
-    position,
-    description: item.description,
-    quantity: item.quantity,
-    unitPrice: item.unitPrice,
-    discountType: item.discountValue ? item.discountType : null,
-    discountValue: item.discountType ? item.discountValue : null,
-    taxRate: item.taxExempt ? "0" : item.taxRate,
-    taxExempt: item.taxExempt,
-    taxExemptReason: item.taxExempt ? (item.taxExemptReason ?? null) : null,
-    ...amounts,
-  };
 }
 
 /** Recomputes the stored totals from the lines currently in the database. */
@@ -148,7 +122,7 @@ export const invoiceService = {
       const byId = new Map(products.map((product) => [product.id, product]));
       const rows = productIds.map((productId, position) => {
         const product = byId.get(productId)!;
-        return itemRow(
+        return documentItemRow(
           {
             id: randomUUID(),
             productId: product.id,
@@ -209,7 +183,7 @@ export const invoiceService = {
         if (items) {
           await tx.invoiceItem.deleteMany({ where: { invoiceId: id } });
           if (items.length) {
-            await tx.invoiceItem.createMany({ data: items.map((item, position) => ({ ...itemRow(item, position), invoiceId: id })) });
+            await tx.invoiceItem.createMany({ data: items.map((item, position) => ({ ...documentItemRow(item, position), invoiceId: id })) });
           }
         }
         await recalculate(tx, id);
@@ -239,7 +213,7 @@ export const invoiceService = {
       const problems = findIssueProblems({
         clientId: invoice.clientId,
         issueDate: toIsoDate(invoice.issueDate),
-        dueDate: toIsoDate(invoice.dueDate),
+        endDate: toIsoDate(invoice.dueDate),
         items: invoice.items.map(toItemDto),
       });
       if (problems.length) throw ApiError.validation(problemsToFieldErrors(problems), "Fix these before sending");
@@ -328,7 +302,7 @@ export const invoiceService = {
       throw ApiError.validation(problemsToFieldErrors(dto.issues), "Fix these before downloading the PDF");
     }
     const view = invoiceViewFrom(dto, await documentParties(detail));
-    return { pdf: await renderInvoicePdf(view, dto.template), number: dto.number };
+    return { pdf: await renderDocumentPdf(view, dto.template), number: dto.number };
   },
 
   count(context: BusinessContext) {

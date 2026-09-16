@@ -10,6 +10,7 @@ export const invoiceDetailInclude = {
   items: { orderBy: { position: "asc" } },
   payments: { orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }] },
   events: { orderBy: { createdAt: "desc" } },
+  fromEstimate: { select: { id: true, number: true } },
 } satisfies Prisma.InvoiceInclude;
 
 export type InvoiceDetail = Prisma.InvoiceGetPayload<{ include: typeof invoiceDetailInclude }>;

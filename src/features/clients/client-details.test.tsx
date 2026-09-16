@@ -3,6 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ClientDetails } from "./client-details";
 
+const push = vi.hoisted(() => vi.fn());
+const api = vi.hoisted(() => ({ post: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+vi.mock("@/lib/api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api-client")>()),
+  api,
+}));
+
 const client = {
   id: "c1",
   name: "Halcyon Labs",
@@ -31,6 +39,17 @@ describe("ClientDetails", () => {
     expect(screen.getByText("Rua do Século 44, Lisbon, Portugal")).toBeInTheDocument();
     expect(screen.getByText("USD (default)")).toBeInTheDocument();
     expect(screen.getByText("Pays on the 1st.")).toBeInTheDocument();
+  });
+
+  it("starts an invoice or an estimate for this client", async () => {
+    api.post.mockResolvedValue({ id: "est1" });
+    const user = userEvent.setup();
+    render(<ClientDetails client={client} defaultCurrency="USD" onEdit={vi.fn()} onDelete={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: "New estimate" }));
+
+    expect(api.post).toHaveBeenCalledWith("/estimates", { clientId: "c1" });
+    expect(push).toHaveBeenCalledWith("/estimates/est1");
   });
 
   it("wires the edit and delete actions", async () => {

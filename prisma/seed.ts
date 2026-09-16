@@ -3,7 +3,7 @@ import { hash } from "@node-rs/argon2";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { randomBytes } from "node:crypto";
 import { PrismaClient, type Prisma } from "../src/generated/prisma/client";
-import { calculateLine, calculateTotals, subtractMoney, type LineInput } from "../src/lib/invoices/math";
+import { calculateLine, calculateTotals, subtractMoney, type LineInput } from "../src/lib/documents/math";
 
 /**
  * Development data from the design handoff (all fictional). Recreates the demo account on every
@@ -21,9 +21,9 @@ const day = (offset: number) => {
   return date;
 };
 const at = (offset: number, hour = 10) => new Date(day(offset).getTime() + hour * 3_600_000);
-const token = () => {
+const token = (prefix: "inv" | "est" = "inv") => {
   const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-  return `inv_${[...randomBytes(20)].map((byte) => alphabet[byte & 31]).join("")}`;
+  return `${prefix}_${[...randomBytes(20)].map((byte) => alphabet[byte & 31]).join("")}`;
 };
 
 type SeedLine = { description: string; quantity: string; unitPrice: string; discountPercent?: string; taxRate?: string };
@@ -64,7 +64,7 @@ async function main() {
           defaultCurrency: "USD",
           defaultTaxRate: "23",
           invoiceNextNumber: 45,
-          estimateNextNumber: 15,
+          estimateNextNumber: 16,
           timezone: "Europe/Lisbon",
           paymentInstructions: "Bank transfer — IBAN PT50 0002 0123 1234 5678 9015 4. Please reference the invoice number.",
         },
@@ -187,6 +187,89 @@ async function main() {
       { description: "Handoff & QA support", quantity: "6", unitPrice: "140", discountPercent: "10" },
     ],
   });
+
+  async function estimate(options: {
+    sequence: number;
+    client?: string;
+    issued: number;
+    expires: number;
+    lines: SeedLine[];
+    terms?: string;
+    status: "DRAFT" | "SENT" | "VIEWED" | "ACCEPTED" | "DECLINED" | "CONVERTED";
+    viewed?: number;
+    replied?: number;
+    convertedInvoice?: number;
+  }) {
+    const client = options.client ? clients[options.client] : null;
+    const rows = lineRows(options.lines);
+    const sent = options.status !== "DRAFT";
+    const events: Prisma.EstimateEventCreateWithoutEstimateInput[] = [{ type: "CREATED", createdAt: at(options.issued, 9) }];
+    if (sent) events.push({ type: "SENT", metadata: { channel: "manual" }, createdAt: at(options.issued, 11) });
+    if (options.viewed !== undefined) events.push({ type: "VIEWED", createdAt: at(options.viewed, 18) });
+    if (options.replied !== undefined) {
+      const accepted = options.status === "ACCEPTED" || options.status === "CONVERTED";
+      events.push({ type: accepted ? "ACCEPTED" : "DECLINED", metadata: { by: "client" }, createdAt: at(options.replied, 9) });
+    }
+    const convertedInvoice = options.convertedInvoice
+      ? await db.invoice.findUniqueOrThrow({ where: { businessId_sequence: { businessId, sequence: options.convertedInvoice } } })
+      : null;
+    if (convertedInvoice) {
+      events.push({ type: "CONVERTED", metadata: { invoiceId: convertedInvoice.id, invoiceNumber: convertedInvoice.number }, createdAt: at(options.replied!, 12) });
+    }
+
+    await db.estimate.create({
+      data: {
+        businessId,
+        clientId: client?.id ?? null,
+        sequence: options.sequence,
+        number: `EST-${String(options.sequence).padStart(4, "0")}`,
+        status: options.status,
+        issueDate: day(options.issued),
+        expiryDate: day(options.expires),
+        currency: "USD",
+        ...calculateTotals(rows),
+        terms: options.terms ?? null,
+        publicToken: sent && options.status !== "CONVERTED" ? token("est") : null,
+        sentAt: sent ? at(options.issued, 11) : null,
+        viewedAt: options.viewed !== undefined ? at(options.viewed, 18) : null,
+        acceptedAt: options.replied !== undefined && options.status !== "DECLINED" ? at(options.replied, 9) : null,
+        declinedAt: options.status === "DECLINED" ? at(options.replied!, 9) : null,
+        respondedBy: options.replied !== undefined ? "client" : null,
+        convertedAt: convertedInvoice ? at(options.replied!, 12) : null,
+        convertedInvoiceId: convertedInvoice?.id ?? null,
+        issuerSnapshot: sent ? issuer : undefined,
+        billToSnapshot:
+          sent && client
+            ? { name: client.name, email: client.email, phone: client.phone, company: client.company, taxId: client.taxId, address: client.address, city: client.city, state: client.state, postalCode: client.postalCode, country: client.country }
+            : undefined,
+        items: { create: rows },
+        events: { create: events },
+        createdAt: at(options.issued, 9),
+      },
+    });
+  }
+
+  const scope = "Valid for 14 days. 50% due on kickoff, balance on delivery. Two revision rounds included per screen.";
+  await estimate({ sequence: 10, client: "Northwind Café", issued: -19, expires: -5, status: "DECLINED", viewed: -18, replied: -12, lines: [{ description: "Signage package", quantity: "1", unitPrice: "2480" }] });
+  await estimate({ sequence: 11, client: "Halcyon Labs", issued: -15, expires: -1, status: "CONVERTED", viewed: -14, replied: -3, convertedInvoice: 42, lines: [{ description: "Design retainer — monthly", quantity: "1", unitPrice: "5200", taxRate: "23" }] });
+  await estimate({ sequence: 12, client: "Vale Coffee", issued: -35, expires: -21, status: "SENT", lines: [{ description: "Motion identity", quantity: "1", unitPrice: "5400" }] });
+  await estimate({ sequence: 13, client: "Vale Coffee", issued: -11, expires: 3, status: "VIEWED", viewed: -9, terms: scope, lines: [{ description: "Packaging refresh", quantity: "1", unitPrice: "3150" }] });
+  await estimate({
+    sequence: 14,
+    client: "Pine & Co.",
+    issued: -8,
+    expires: 6,
+    status: "ACCEPTED",
+    viewed: -7,
+    replied: -2,
+    terms: scope,
+    lines: [
+      { description: "Website redesign — discovery & IA", quantity: "1", unitPrice: "2400" },
+      { description: "UI design — 12 screens", quantity: "12", unitPrice: "320" },
+      { description: "Handoff & QA support", quantity: "6", unitPrice: "140", discountPercent: "10" },
+    ],
+  });
+  await estimate({ sequence: 15, issued: 0, expires: 14, status: "DRAFT", lines: [] });
 
   console.log(`Seeded demo account: ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
 }

@@ -1,5 +1,5 @@
 import { daysBetween, formatLongDate, type IsoDate } from "@/lib/dates";
-import { compareMoney, isZero } from "@/lib/invoices/math";
+import { compareMoney, isZero } from "@/lib/documents/math";
 import { formatAmount, formatMoney, formatPercent, formatQuantity } from "@/lib/money";
 
 export interface PartyInput {
@@ -30,11 +30,15 @@ export interface DocumentLineInput {
   total: string;
 }
 
-export interface InvoiceViewInput {
+export type DocumentKind = "invoice" | "estimate";
+
+export interface DocumentViewInput {
+  kind?: DocumentKind;
   number: string;
   currency: string;
   issueDate: IsoDate;
-  dueDate: IsoDate;
+  /** Due date for invoices, expiry date for estimates. */
+  endDate: IsoDate;
   issuer: PartyInput;
   billTo: PartyInput | null;
   lines: DocumentLineInput[];
@@ -80,12 +84,51 @@ export interface DocumentLine {
  * Everything a template prints, already formatted. Built once and handed to the editor
  * preview, the public page and the PDF, so all three always agree.
  */
-export interface InvoiceView {
+export interface DocumentLabels {
+  title: string;
+  numberLabel: string;
+  amount: string;
+  /** Short label for the end date: "Due" / "Valid until". */
+  end: string;
+  endDate: string;
+  /** Word before the end date in running text: "by" / "valid until". */
+  endPrefix: string;
+  billTo: string;
+  grandTotal: string;
+}
+
+const LABELS: Record<DocumentKind, DocumentLabels> = {
+  invoice: {
+    title: "Invoice",
+    numberLabel: "Invoice no.",
+    amount: "Amount due",
+    end: "Due",
+    endDate: "Due date",
+    endPrefix: "by",
+    billTo: "Bill to",
+    grandTotal: "Total due",
+  },
+  estimate: {
+    title: "Estimate",
+    numberLabel: "Estimate no.",
+    amount: "Estimate total",
+    end: "Valid until",
+    endDate: "Valid until",
+    endPrefix: "valid until",
+    billTo: "Prepared for",
+    grandTotal: "Total",
+  },
+};
+
+export interface DocumentView {
+  kind: DocumentKind;
+  labels: DocumentLabels;
   number: string;
   currency: string;
   issued: string;
-  due: string;
-  /** "Net 14" or "Due on receipt" */
+  /** Formatted due date (invoices) or expiry date (estimates). */
+  end: string;
+  /** "Net 14", "Due on receipt" or, for estimates, "Valid for 14 days" */
   termsLabel: string;
   issuer: DocumentParty;
   billTo: DocumentParty | null;
@@ -132,15 +175,24 @@ function taxLabel(lines: DocumentLineInput[]): string {
   return rates.size === 1 ? `VAT (${formatPercent(taxed[0].taxRate)})` : "VAT";
 }
 
-export function buildInvoiceView(input: InvoiceViewInput): InvoiceView {
+export function buildDocumentView(input: DocumentViewInput): DocumentView {
+  const kind = input.kind ?? "invoice";
   const money = (value: string) => formatMoney(value, input.currency);
-  const termDays = daysBetween(input.issueDate, input.dueDate);
+  const termDays = daysBetween(input.issueDate, input.endDate);
+  const termsLabel =
+    kind === "estimate"
+      ? `Valid for ${Math.max(termDays, 0)} day${termDays === 1 ? "" : "s"}`
+      : termDays <= 0
+        ? "Due on receipt"
+        : `Net ${termDays}`;
   return {
+    kind,
+    labels: LABELS[kind],
     number: input.number,
     currency: input.currency,
     issued: formatLongDate(input.issueDate),
-    due: formatLongDate(input.dueDate),
-    termsLabel: termDays <= 0 ? "Due on receipt" : `Net ${termDays}`,
+    end: formatLongDate(input.endDate),
+    termsLabel,
     issuer: party(input.issuer),
     billTo: input.billTo ? party(input.billTo) : null,
     lines: input.lines.map((line) => ({
@@ -163,8 +215,9 @@ export function buildInvoiceView(input: InvoiceViewInput): InvoiceView {
       taxLabel: taxLabel(input.lines),
       tax: money(input.tax),
       total: money(input.total),
-      amountPaid: compareMoney(input.amountPaid, "0") > 0 ? money(input.amountPaid) : null,
-      amountDue: money(input.amountDue),
+      // Estimates aren't paid; their headline amount is simply the total.
+      amountPaid: kind === "invoice" && compareMoney(input.amountPaid, "0") > 0 ? money(input.amountPaid) : null,
+      amountDue: money(kind === "invoice" ? input.amountDue : input.total),
     },
     exemptions: [
       ...new Set(
@@ -173,9 +226,11 @@ export function buildInvoiceView(input: InvoiceViewInput): InvoiceView {
           .map((line) => `VAT exempt — ${line.taxExemptReason}`),
       ),
     ],
-    paymentInstructions: input.issuer.paymentInstructions ?? null,
+    // How to pay belongs on invoices; an estimate asks for a decision, not money.
+    paymentInstructions: kind === "invoice" ? (input.issuer.paymentInstructions ?? null) : null,
     notes: input.notes,
     terms: input.terms,
     accent: input.color,
   };
 }
+

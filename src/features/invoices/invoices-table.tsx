@@ -2,7 +2,7 @@ import { cn } from "cn";
 import { FileTextIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { InvoiceStatusBadge } from "@/components/invoices/status-badge";
+import { StatusBadge } from "@/components/documents/status-badge";
 import { EmptyState } from "@/components/list/empty-state";
 import { Pagination } from "@/components/list/pagination";
 import type { ApiList, InvoiceListItemDto } from "@/lib/api-types";
@@ -30,6 +30,7 @@ export function InvoicesTable({
   title = "Invoices",
   emptyAction,
   paginate = true,
+  footer,
 }: {
   result: ApiList<InvoiceListItemDto>;
   pathname: string;
@@ -38,6 +39,7 @@ export function InvoicesTable({
   title?: string;
   emptyAction?: ReactNode;
   paginate?: boolean;
+  footer?: ReactNode;
 }) {
   const { data: invoices, pagination } = result;
   return (
@@ -126,7 +128,7 @@ export function InvoicesTable({
                     {formatMoney(invoice.total, invoice.currency)}
                   </span>
                   <span className="col-start-2 row-start-2 flex justify-end md:col-auto md:row-auto md:justify-center">
-                    <InvoiceStatusBadge status={invoice.displayStatus} />
+                    <StatusBadge status={invoice.displayStatus} />
                   </span>
                   <span className="col-start-3 row-span-2 row-start-1 md:col-auto md:row-auto md:row-span-1">
                     <InvoiceRowActions invoice={invoice} />
@@ -138,6 +140,7 @@ export function InvoicesTable({
           {paginate ? <Pagination pathname={pathname} searchParams={searchParams} {...pagination} /> : null}
         </>
       )}
+      {footer}
     </section>
   );
 }

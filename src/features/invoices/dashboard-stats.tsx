@@ -1,9 +1,9 @@
 import Link from "next/link";
 import type { DashboardDto } from "@/lib/api-types";
-import { compareMoney, isZero, percentOf, subtractMoney } from "@/lib/invoices/math";
+import { compareMoney, isZero, percentOf, subtractMoney } from "@/lib/documents/math";
 import { formatMoney } from "@/lib/money";
 import { pluralize } from "@/lib/format";
-import { StatCard } from "./stat-card";
+import { StatCard } from "@/components/documents/stat-card";
 
 function monthDelta(stats: DashboardDto): { text: string; tone?: "success" } {
   const { amount, previousMonth } = stats.paidThisMonth;

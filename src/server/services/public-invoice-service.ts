@@ -1,11 +1,11 @@
 import "server-only";
 import type { InvoiceDto } from "@/lib/api-types";
 import { daysBetween, todayIn } from "@/lib/dates";
-import type { InvoiceView } from "@/lib/documents/view";
-import { isZero } from "@/lib/invoices/math";
+import type { DocumentView } from "@/lib/documents/view";
+import { isZero } from "@/lib/documents/math";
 import { db } from "@/server/db";
-import { documentParties, invoiceViewFrom, renderInvoicePdf } from "@/server/invoices/document";
-import { PUBLIC_TOKEN_PATTERN } from "@/server/invoices/public-token";
+import { documentParties, invoiceViewFrom, renderDocumentPdf } from "@/server/documents/render";
+import { PUBLIC_TOKEN_PATTERN } from "@/server/documents/public-token";
 import { toInvoiceDto } from "@/server/invoices/serializers";
 import { invoiceRepository, type InvoiceDetail } from "@/server/repositories/invoice-repository";
 
@@ -15,7 +15,7 @@ export type PublicTone = "sent" | "partial" | "paid" | "overdue";
 export interface PublicInvoice {
   number: string;
   template: InvoiceDto["template"];
-  view: InvoiceView;
+  view: DocumentView;
   status: { label: string; tone: PublicTone };
   /** "Due in 14 days", "Due today", "Overdue by 3 days", "Paid in full" */
   dueLabel: string;
@@ -92,6 +92,6 @@ export const publicInvoiceService = {
   async pdf(token: string): Promise<{ pdf: Buffer; number: string } | null> {
     const invoice = await this.find(token);
     if (!invoice) return null;
-    return { pdf: await renderInvoicePdf(invoice.view, invoice.template), number: invoice.number };
+    return { pdf: await renderDocumentPdf(invoice.view, invoice.template), number: invoice.number };
   },
 };

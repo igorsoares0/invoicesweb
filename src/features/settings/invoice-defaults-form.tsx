@@ -42,6 +42,7 @@ export function InvoiceDefaultsForm({ business }: { business: BusinessDto }) {
       defaultCurrency: value("defaultCurrency"),
       defaultTaxRate: defaultTaxRate === "" ? null : defaultTaxRate,
       paymentTermsDays: value("paymentTermsDays"),
+      estimateValidityDays: value("estimateValidityDays"),
       timezone: value("timezone"),
       paymentInstructions: value("paymentInstructions"),
     };
@@ -138,7 +139,20 @@ export function InvoiceDefaultsForm({ business }: { business: BusinessDto }) {
               {...errorProps("estimateNextNumber", error("estimateNextNumber"))}
             />
           </Field>
-          <Field id="timezone" label="Time zone" error={error("timezone")} className="sm:col-span-2">
+          <Field id="estimateValidityDays" label="Estimates valid for" error={error("estimateValidityDays")}>
+            <div className="relative">
+              <Input
+                id="estimateValidityDays"
+                name="estimateValidityDays"
+                inputMode="numeric"
+                defaultValue={business.estimateValidityDays}
+                className="pr-12"
+                {...errorProps("estimateValidityDays", error("estimateValidityDays"))}
+              />
+              <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted-2">days</span>
+            </div>
+          </Field>
+          <Field id="timezone" label="Time zone" error={error("timezone")} className="sm:col-span-3">
             <NativeSelect id="timezone" name="timezone" defaultValue={business.timezone}>
               {TIME_ZONES.map((zone) => (
                 <option key={zone} value={zone}>

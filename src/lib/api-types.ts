@@ -45,6 +45,7 @@ export interface BusinessDto {
   estimatePrefix: string;
   estimateNextNumber: number;
   paymentInstructions: string | null;
+  estimateValidityDays: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -104,6 +105,10 @@ export type DisplayInvoiceStatus = InvoiceStatus | "OVERDUE";
 export type DocumentTemplate = "MODERN" | "CLASSIC" | "MINIMAL" | "PROFESSIONAL" | "BOLD";
 export type PaymentMethod = "BANK_TRANSFER" | "CARD" | "CASH" | "PAYPAL" | "OTHER";
 export type InvoiceEventType =
+  | "ACCEPTED"
+  | "DECLINED"
+  | "REOPENED"
+  | "CONVERTED"
   | "CREATED"
   | "UPDATED"
   | "SENT"
@@ -200,6 +205,8 @@ export interface InvoiceDto extends Omit<InvoiceListItemDto, "client" | "summary
   events: InvoiceEventDto[];
   /** What blocks sending and the PDF; empty when ready. */
   issues: InvoiceIssueDto[];
+  /** The estimate this invoice was converted from. */
+  fromEstimate: { id: string; number: string } | null;
   updatedAt: string;
 }
 
@@ -211,4 +218,61 @@ export interface DashboardDto {
   outstanding: { amount: string; count: number };
   overdue: { amount: string; count: number; oldestDays: number | null };
   averageDaysToPay: number | null;
+}
+
+export type EstimateStatus = "DRAFT" | "SENT" | "VIEWED" | "ACCEPTED" | "DECLINED" | "CONVERTED";
+export type DisplayEstimateStatus = EstimateStatus | "EXPIRED";
+
+export interface EstimateListItemDto {
+  id: string;
+  number: string;
+  status: EstimateStatus;
+  displayStatus: DisplayEstimateStatus;
+  issueDate: string;
+  expiryDate: string;
+  currency: string;
+  total: string;
+  client: { id: string; name: string } | null;
+  summary: string | null;
+  acceptedAt: string | null;
+  createdAt: string;
+}
+
+export interface EstimateDto extends Omit<EstimateListItemDto, "client" | "summary"> {
+  sequence: number;
+  client: InvoiceClientDto | null;
+  subtotal: string;
+  discount: string;
+  tax: string;
+  notes: string | null;
+  terms: string | null;
+  template: DocumentTemplate;
+  color: string;
+  publicToken: string | null;
+  sentAt: string | null;
+  viewedAt: string | null;
+  declinedAt: string | null;
+  convertedAt: string | null;
+  respondedBy: "client" | "you" | null;
+  convertedInvoice: { id: string; number: string } | null;
+  items: InvoiceItemDto[];
+  events: InvoiceEventDto[];
+  issues: InvoiceIssueDto[];
+  updatedAt: string;
+}
+
+export interface EstimateSummaryDto {
+  currency: string;
+  otherCurrencies: string[];
+  awaitingReply: { amount: string; count: number };
+  acceptedNotInvoiced: { amount: string; count: number };
+  wonThisQuarter: { percent: number | null; accepted: number; decided: number };
+  averageReplyDays: number | null;
+  /** The oldest accepted estimate that hasn't become an invoice yet, for the reminder strip. */
+  readyToConvert: { id: string; number: string; clientName: string | null; acceptedAt: string } | null;
+}
+
+export interface ConvertEstimateResultDto {
+  invoice: InvoiceDto;
+  estimate: EstimateDto;
 }

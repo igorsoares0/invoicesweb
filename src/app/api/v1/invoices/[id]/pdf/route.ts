@@ -1,5 +1,5 @@
 import { withApi } from "@/server/api/handler";
-import { pdfResponse } from "@/server/invoices/document";
+import { pdfResponse } from "@/server/documents/render";
 import { invoiceService } from "@/server/services/invoice-service";
 
 type Params = { id: string };

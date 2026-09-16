@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildInvoiceView, type InvoiceViewInput } from "./view";
+import { buildDocumentView, type DocumentViewInput } from "./view";
 
-const input: InvoiceViewInput = {
+const input: DocumentViewInput = {
   number: "INV-0044",
   currency: "USD",
   issueDate: "2026-09-12",
-  dueDate: "2026-09-26",
+  endDate: "2026-09-26",
   issuer: {
     name: "Alvorada Studio",
     email: "hello@alvorada.studio",
@@ -42,12 +42,12 @@ const input: InvoiceViewInput = {
   color: "#1e40af",
 };
 
-describe("buildInvoiceView", () => {
+describe("buildDocumentView", () => {
   it("formats dates, terms, parties and money for printing", () => {
-    const view = buildInvoiceView(input);
+    const view = buildDocumentView(input);
     expect(view).toMatchObject({
       issued: "September 12, 2026",
-      due: "September 26, 2026",
+      end: "September 26, 2026",
       termsLabel: "Net 14",
       paymentInstructions: "Bank transfer — IBAN PT50 0002 0123 1234 5678 9015 4.",
     });
@@ -65,7 +65,7 @@ describe("buildInvoiceView", () => {
   });
 
   it("formats lines with adjustments and lists exemption reasons once", () => {
-    const view = buildInvoiceView({ ...input, lines: [...input.lines, { ...input.lines[1], description: "More QA" }] });
+    const view = buildDocumentView({ ...input, lines: [...input.lines, { ...input.lines[1], description: "More QA" }] });
     expect(view.lines[1]).toEqual({
       description: "Handoff & QA support",
       quantity: "6",
@@ -79,9 +79,9 @@ describe("buildInvoiceView", () => {
   });
 
   it("handles fixed discounts, missing prices, payments and same-day terms", () => {
-    const view = buildInvoiceView({
+    const view = buildDocumentView({
       ...input,
-      dueDate: "2026-09-12",
+      endDate: "2026-09-12",
       amountPaid: "1000.00",
       amountDue: "2156.00",
       lines: [{ ...input.lines[0], unitPrice: null, discountType: "FIXED", discountValue: "50.00", taxRate: "23.00" }],
@@ -93,8 +93,16 @@ describe("buildInvoiceView", () => {
     expect(view.billTo).toBeNull();
   });
 
+  it("relabels everything for estimates and drops payment details", () => {
+    const view = buildDocumentView({ ...input, kind: "estimate", amountPaid: "500.00", amountDue: "2656.00" });
+    expect(view.labels).toMatchObject({ title: "Estimate", amount: "Estimate total", billTo: "Prepared for", end: "Valid until" });
+    expect(view.termsLabel).toBe("Valid for 14 days");
+    expect(view.paymentInstructions).toBeNull();
+    expect(view.totals).toMatchObject({ amountPaid: null, amountDue: "$3,156.00" });
+  });
+
   it("labels mixed VAT rates generically", () => {
-    const view = buildInvoiceView({
+    const view = buildDocumentView({
       ...input,
       lines: [
         { ...input.lines[0], taxRate: "23.00" },

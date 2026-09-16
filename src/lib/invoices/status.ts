@@ -1,5 +1,5 @@
 import type { IsoDate } from "@/lib/dates";
-import { compareMoney } from "./math";
+import { compareMoney } from "@/lib/documents/math";
 
 export const INVOICE_STATUSES = ["DRAFT", "SENT", "VIEWED", "PARTIALLY_PAID", "PAID", "CANCELLED"] as const;
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];

@@ -1,7 +1,7 @@
 import { ApiError } from "@/server/api/errors";
 import { errorResponse } from "@/server/api/responses";
 import { clientIp, publicDocumentLimiter } from "@/server/auth/rate-limit";
-import { pdfResponse } from "@/server/invoices/document";
+import { pdfResponse } from "@/server/documents/render";
 import { publicInvoiceService } from "@/server/services/public-invoice-service";
 
 export async function GET(request: Request, { params }: RouteContext<"/i/[token]/pdf">) {

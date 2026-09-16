@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/app-shell/page-header";
 import { SearchInput } from "@/components/list/search-input";
 import { InvoicesTable } from "@/features/invoices/invoices-table";
-import { NewInvoiceButton } from "@/features/invoices/new-invoice-button";
+import { NewDocumentButton } from "@/features/documents/new-document-button";
 import { firstValues } from "@/lib/url";
 import { listInvoicesQuerySchema } from "@/lib/validation/invoice";
 import { requireBusiness } from "@/server/auth/session";
@@ -19,7 +19,7 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
 
   return (
     <>
-      <PageHeader title="Invoices" actions={<NewInvoiceButton />} />
+      <PageHeader title="Invoices" actions={<NewDocumentButton />} />
       <main className="flex flex-col gap-4 px-4 py-5 sm:px-6">
         <SearchInput label="Search invoices" placeholder="Search number, client or item" />
         <InvoicesTable
@@ -27,7 +27,7 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
           pathname="/invoices"
           searchParams={params}
           filter={query.status}
-          emptyAction={<NewInvoiceButton label="Create your first invoice" />}
+          emptyAction={<NewDocumentButton label="Create your first invoice" />}
         />
       </main>
     </>

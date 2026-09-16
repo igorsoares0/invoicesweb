@@ -39,6 +39,7 @@
   --success: #15803d;
   --success-tint: #f0fdf4;
   --success-ink: #166534;
+  --success-border: #bbf7d0;
   --warning: #b45309;
   --warning-tint: #fffbeb;
   --danger-tint: #fef2f2;
@@ -79,6 +80,7 @@
   --color-success: var(--success);
   --color-success-tint: var(--success-tint);
   --color-success-ink: var(--success-ink);
+  --color-success-border: var(--success-border);
   --color-warning: var(--warning);
   --color-warning-tint: var(--warning-tint);
   --color-danger-tint: var(--danger-tint);

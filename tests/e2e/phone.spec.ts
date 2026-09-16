@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { signIn } from "./support/auth";
-import { createAccount } from "./support/db";
+import { createAccount, createClient } from "./support/db";
+import { sentEstimate } from "./support/estimates";
 
 test("works at phone width: tab bar, bottom sheets and card rows", async ({ page }) => {
   const account = await createAccount();
@@ -59,6 +60,24 @@ test("edits an invoice on a phone with cards and a bottom sheet", async ({ page 
 
   await page.getByRole("tab", { name: "Preview" }).click();
   await expect(page.getByRole("article")).toContainText("Handoff & QA support");
+
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(scrollWidth).toBeLessThanOrEqual(390);
+});
+
+test("a client accepts an estimate on a phone", async ({ page, browser }) => {
+  const account = await createAccount();
+  await createClient(account.businessId, { name: "Vale Coffee", email: "ops@valecoffee.com" });
+  const desktop = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await signIn(desktop, account.email, account.password);
+  const { number, publicPath } = await sentEstimate(desktop, "Vale Coffee", "Packaging refresh", "3150");
+  await desktop.close();
+
+  await page.goto(publicPath);
+  await expect(page.getByText("Estimate total", { exact: true }).filter({ visible: true }).first()).toBeVisible();
+  await expect(page.getByText(number).filter({ visible: true })).toBeVisible();
+  await page.getByRole("button", { name: "Accept estimate" }).filter({ visible: true }).click();
+  await expect(page.getByRole("status").filter({ visible: true })).toContainText(/^Accepted on/);
 
   const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(scrollWidth).toBeLessThanOrEqual(390);

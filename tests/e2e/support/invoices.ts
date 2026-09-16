@@ -12,8 +12,8 @@ export async function waitForSaved(page: Page) {
   await expect(page.getByRole("status").filter({ hasText: /^Saved/ })).toBeVisible({ timeout: 20_000 });
 }
 
-export async function pickClient(page: Page, name: string) {
-  await page.getByRole("combobox", { name: "Bill to" }).click();
+export async function pickClient(page: Page, name: string, label = "Bill to") {
+  await page.getByRole("combobox", { name: label }).click();
   await page.getByRole("option", { name: new RegExp(name.replace(/[.&]/g, ".")) }).click();
 }
 

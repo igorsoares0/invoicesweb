@@ -66,3 +66,11 @@ export async function closePool() {
   await pool?.end();
   pool = undefined;
 }
+
+/** Moves an estimate's expiry date into the past, to exercise the expired states. */
+export async function expireEstimate(number: string, businessId: string) {
+  await getPool().query(`UPDATE "Estimate" SET "expiryDate" = '2020-01-01' WHERE number = $1 AND "businessId" = $2`, [
+    number,
+    businessId,
+  ]);
+}

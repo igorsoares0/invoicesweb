@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { NewDocumentButton } from "@/features/documents/new-document-button";
 import { InitialAvatar } from "@/components/list/avatar";
 import type { ClientDto } from "@/lib/api-types";
 import { formatAddress, formatMonthYear } from "@/lib/format";
@@ -57,9 +58,10 @@ export function ClientDetails({
         </section>
       ) : null}
 
-      <section className="rounded-lg border border-dashed px-4 py-3 text-[13px] text-muted-foreground">
-        Invoices and estimates for this client will show up here once invoicing is available.
-      </section>
+      <div className="grid grid-cols-2 gap-2">
+        <NewDocumentButton kind="invoice" clientId={client.id} />
+        <NewDocumentButton kind="estimate" clientId={client.id} variant="outline" />
+      </div>
 
       <div className="mt-auto flex items-center justify-between pt-2">
         <Button variant="outline" size="lg" onClick={onEdit}>

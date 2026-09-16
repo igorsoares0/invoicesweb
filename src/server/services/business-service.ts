@@ -6,6 +6,7 @@ import { ApiError } from "@/server/api/errors";
 import type { BusinessContext } from "@/server/auth/types";
 import { getEntitlements } from "@/server/entitlements/entitlements";
 import { businessRepository } from "@/server/repositories/business-repository";
+import { estimateRepository } from "@/server/repositories/estimate-repository";
 import { invoiceRepository } from "@/server/repositories/invoice-repository";
 import { isPrismaError } from "@/server/repositories/prisma-errors";
 import { toBusinessDto } from "@/server/repositories/serializers";
@@ -48,6 +49,12 @@ export const businessService = {
       const used = await invoiceRepository.maxSequence(context.businessId);
       if (parsed.data.invoiceNextNumber <= used) {
         throw ApiError.validation({ invoiceNextNumber: [`Must be ${used + 1} or more — ${used} is already used`] });
+      }
+    }
+    if (parsed.data.estimateNextNumber !== undefined) {
+      const used = await estimateRepository.maxSequence(context.businessId);
+      if (parsed.data.estimateNextNumber <= used) {
+        throw ApiError.validation({ estimateNextNumber: [`Must be ${used + 1} or more — ${used} is already used`] });
       }
     }
     const business = await businessRepository.update(context.businessId, parsed.data);

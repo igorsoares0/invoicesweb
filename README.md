@@ -4,10 +4,12 @@ SaaS for freelancers and small businesses to create, send and track invoices and
 The product spec lives in [`docs/Invoice Maker — Spec-Driven Development.md`](docs/) and the
 high-fidelity design in [`docs/design_handoff_invoice_maker_web/`](docs/design_handoff_invoice_maker_web/README.md).
 
-**Status: phase 2 (invoicing).** Accounts (email + password, Google), onboarding, business
+**Status: phase 3 (estimates).** Accounts (email + password, Google), onboarding, business
 settings, clients and the items catalog (phase 1); invoices with server-side totals, continuous
 numbering, an autosaving editor, five PDF templates, public links, manual payments and the
-overview dashboard (phase 2). Estimates, email sending and billing follow in phases 3–5.
+overview dashboard (phase 2); estimates that clients accept or decline from a public link,
+expire on their own and convert into invoices with prices locked (phase 3). Email sending and
+billing follow in phases 4–5.
 
 ## Stack
 
@@ -65,9 +67,11 @@ src/
     (auth)/            sign-in, sign-up
     (app)/             overview, invoices, clients, products, settings (require a business)
     i/[token]/         public invoice page and PDF (no account needed)
+    e/[token]/         public estimate page, accept/decline and PDF
     onboarding/
     api/v1/            thin route handlers → services
-  features/            UI per domain (auth, clients, products, settings, invoices, documents, public)
+  features/            UI per domain (auth, clients, products, settings, invoices, estimates, public)
+    documents/         shared by invoices and estimates: editor, templates, detail cards
   components/          ui/ (shadcn), app-shell/, list/, forms/
   lib/                 shared by client and server: validation schemas, api client, money, formatting
   server/
@@ -92,7 +96,11 @@ src/
   totals are computed on the server with per-line rounding; status changes only through actions;
   `OVERDUE` is derived when reading. Sending freezes the issuer and client into the invoice.
 - **Documents:** one set of React templates + CSS (`src/features/documents`) renders the editor
-  preview, the public page and the PDF, so all three always match.
+  preview, the public page and the PDF, so all three always match. Invoices and estimates share
+  the editor, line math, validation and templates; `DOCUMENT_KINDS` holds what differs.
+- **Estimates:** their own `EST-` sequence; only drafts are editable; `EXPIRED` is derived when
+  reading; a reply is recorded once (by the client on the link, or by you) and conversion to an
+  invoice happens only from `ACCEPTED`, under a row lock.
 
 ### API
 
@@ -118,3 +126,10 @@ Responses follow `{ "data": … }`, `{ "data": [], "pagination": { page, limit, 
 | `DELETE` | `/api/v1/invoices/:id/payments/:paymentId` | |
 | `GET` | `/api/v1/dashboard` | `?currency=EUR`; never converts between currencies |
 | `GET` | `/i/:token/pdf` | Public PDF, rate limited per IP |
+| `GET` `POST` | `/api/v1/estimates` | `?status=draft\|sent\|accepted\|declined\|expired\|converted&q&sort=number\|expiryDate\|issueDate\|total` |
+| `GET` `PATCH` `DELETE` | `/api/v1/estimates/:id` | `PATCH` and `DELETE` for drafts only |
+| `POST` | `/api/v1/estimates/:id/send` · `/accept` · `/decline` · `/reopen` · `/duplicate` | `accept`/`decline` record a reply you received |
+| `POST` | `/api/v1/estimates/:id/convert` | `{ issueDate, dueDate, send? }` → `{ invoice, estimate }` |
+| `POST` `DELETE` | `/api/v1/estimates/:id/public-link` · `GET` `POST` `/pdf` | |
+| `GET` | `/api/v1/estimates/summary` | Awaiting reply, accepted-not-invoiced, win rate, reply time |
+| `GET` · `POST` | `/e/:token/pdf` · `/e/:token/accept` · `/e/:token/decline` | Public, rate limited per IP |

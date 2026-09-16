@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-import { InvoiceStatusBadge } from "@/components/invoices/status-badge";
+import { StatusBadge } from "@/components/documents/status-badge";
 import { ConfirmDeleteDialog } from "@/components/list/confirm-delete-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -20,15 +20,17 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { FittedDocument } from "@/features/documents/fitted-document";
-import { DocumentStyles, InvoiceDocument } from "@/features/documents/invoice-document";
+import { DocumentStyles, PrintedDocument } from "@/features/documents/document-templates";
 import { api } from "@/lib/api-client";
 import type { InvoiceDto } from "@/lib/api-types";
 import { daysBetween, formatDate, formatTimestamp } from "@/lib/dates";
-import type { InvoiceView } from "@/lib/documents/view";
+import type { DocumentView } from "@/lib/documents/view";
 import { describeEvent, type EventTone } from "@/lib/invoices/events";
-import { isZero, percentOf } from "@/lib/invoices/math";
+import { isZero, percentOf } from "@/lib/documents/math";
 import { canPerform } from "@/lib/invoices/status";
 import { formatMoney } from "@/lib/money";
+import { DetailCard } from "@/features/documents/detail/detail-card";
+import { PublicLinkCard } from "@/features/documents/detail/public-link-card";
 import { METHOD_LABELS, RecordPaymentDialog } from "./record-payment-dialog";
 
 const DOT: Record<EventTone, string> = {
@@ -39,20 +41,6 @@ const DOT: Record<EventTone, string> = {
   danger: "bg-destructive",
 };
 
-function Card({ title, children, className, action }: { title?: string; children: React.ReactNode; className?: string; action?: React.ReactNode }) {
-  return (
-    <section className={cn("rounded-lg border bg-card shadow-card", className)} aria-label={title}>
-      {title ? (
-        <div className="flex items-center justify-between px-4 pt-3.5">
-          <h2 className="text-sm font-semibold">{title}</h2>
-          {action}
-        </div>
-      ) : null}
-      {children}
-    </section>
-  );
-}
-
 export function InvoiceDetail({
   invoice: initial,
   view,
@@ -60,7 +48,7 @@ export function InvoiceDetail({
   today,
 }: {
   invoice: InvoiceDto;
-  view: InvoiceView;
+  view: DocumentView;
   timezone: string;
   today: string;
 }) {
@@ -111,7 +99,7 @@ export function InvoiceDetail({
           </Link>
           <span className="hidden text-line-strong sm:inline">/</span>
           <h1 className="font-mono text-[15px] font-semibold">{invoice.number}</h1>
-          <InvoiceStatusBadge status={invoice.displayStatus} />
+          <StatusBadge status={invoice.displayStatus} />
         </div>
         <div className="flex items-center gap-2">
           {canPay ? <Button onClick={() => setPaymentOpen(true)}>Record payment</Button> : null}
@@ -142,7 +130,7 @@ export function InvoiceDetail({
 
       <div className="flex min-w-0 flex-1 flex-col gap-4 px-4 py-5 sm:px-6 xl:flex-row xl:items-start">
         <main className="flex min-w-0 flex-1 flex-col gap-4">
-          <Card>
+          <DetailCard>
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-5 py-4 md:grid-cols-[auto_auto_auto_minmax(120px,1fr)_auto] md:items-end">
               <div className="col-span-2 md:col-span-1">
                 <p className="text-[13px] text-muted-2">Amount due</p>
@@ -171,9 +159,9 @@ export function InvoiceDetail({
                 <p className="text-[15px] font-semibold">{formatDate(invoice.dueDate)}</p>
               </div>
             </div>
-          </Card>
+          </DetailCard>
 
-          <Card
+          <DetailCard
             title={`Payments${invoice.payments.length ? ` · ${invoice.payments.length}` : ""}`}
             action={
               canPay ? (
@@ -217,19 +205,19 @@ export function InvoiceDetail({
                 <span className="font-semibold text-success">Paid</span> automatically.
               </p>
             ) : null}
-          </Card>
+          </DetailCard>
 
-          <Card title="Document">
+          <DetailCard title="Document">
             <div className="p-4">
               <div className="mx-auto max-w-[620px] overflow-hidden rounded-[4px] border shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
                 <FittedDocument maxZoom={1}>
-                  <InvoiceDocument view={view} template={invoice.template} />
+                  <PrintedDocument view={view} template={invoice.template} />
                 </FittedDocument>
               </div>
             </div>
-          </Card>
+          </DetailCard>
 
-          <Card title="History">
+          <DetailCard title="History">
             <ol className="flex flex-col gap-2.5 px-4 pt-2 pb-4" aria-label="History">
               {invoice.events.map((event) => {
                 const { label, tone } = describeEvent(event, invoice.currency);
@@ -244,11 +232,11 @@ export function InvoiceDetail({
                 );
               })}
             </ol>
-          </Card>
+          </DetailCard>
         </main>
 
         <aside className="flex w-full flex-col gap-4 xl:sticky xl:top-[76px] xl:w-[290px] xl:shrink-0">
-          <Card title="Invoice">
+          <DetailCard title="Invoice">
             <dl className="flex flex-col gap-1.5 px-4 pt-2 pb-4 text-[13.5px]">
               {[
                 ["Client", clientName ?? "—"],
@@ -261,10 +249,20 @@ export function InvoiceDetail({
                   <dd className="truncate text-right">{value}</dd>
                 </div>
               ))}
+              {invoice.fromEstimate ? (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted-foreground">Converted from</dt>
+                  <dd>
+                    <Link href={`/estimates/${invoice.fromEstimate.id}`} className="font-mono text-primary">
+                      {invoice.fromEstimate.number}
+                    </Link>
+                  </dd>
+                </div>
+              ) : null}
             </dl>
-          </Card>
+          </DetailCard>
 
-          <Card title="Actions">
+          <DetailCard title="Actions">
             <div className="flex flex-col gap-2 px-4 pt-2 pb-4">
               <a href={`/api/v1/invoices/${invoice.id}/pdf?download=1`} className={buttonVariants({ variant: "outline", size: "lg" })}>
                 Download PDF
@@ -282,57 +280,15 @@ export function InvoiceDetail({
                 </button>
               ) : null}
             </div>
-          </Card>
+          </DetailCard>
 
           {invoice.status !== "CANCELLED" ? (
-            <Card title="Public link">
-              <div className="px-4 pt-2 pb-4 text-[13.5px]">
-                {publicUrl ? (
-                  <>
-                    <a href={publicUrl} target="_blank" rel="noreferrer" className="block truncate font-mono text-[12.5px] text-primary" data-testid="public-link">
-                      {publicUrl}
-                    </a>
-                    <div className="mt-2 flex gap-3 text-muted-foreground">
-                      <button
-                        type="button"
-                        className="hover:text-foreground"
-                        onClick={async () => {
-                          await navigator.clipboard.writeText(new URL(publicUrl, window.location.origin).toString());
-                          toast.success("Link copied");
-                        }}
-                      >
-                        Copy
-                      </button>
-                      <a href={publicUrl} target="_blank" rel="noreferrer" className="hover:text-foreground">
-                        Open
-                      </a>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        className="hover:text-destructive"
-                        onClick={() =>
-                          run(() => api.delete<InvoiceDto>(`/invoices/${invoice.id}/public-link`), "Public link revoked")
-                        }
-                      >
-                        Revoke
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-muted-foreground">The link was revoked. Anyone who opens the old one sees that it no longer works.</p>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      className="mt-2 font-semibold text-primary"
-                      onClick={() => run(() => api.post<InvoiceDto>(`/invoices/${invoice.id}/public-link`, {}), "New link created")}
-                    >
-                      Create a new link
-                    </button>
-                  </>
-                )}
-              </div>
-            </Card>
+            <PublicLinkCard
+              path={publicUrl}
+              busy={busy}
+              onRevoke={() => run(() => api.delete<InvoiceDto>(`/invoices/${invoice.id}/public-link`), "Public link revoked")}
+              onCreate={() => run(() => api.post<InvoiceDto>(`/invoices/${invoice.id}/public-link`, {}), "New link created")}
+            />
           ) : null}
         </aside>
       </div>

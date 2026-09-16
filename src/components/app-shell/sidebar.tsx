@@ -4,10 +4,12 @@ import { cn } from "cn";
 import { LogOutIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { LogoMark } from "@/components/brand/logo";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { signOutAction } from "@/features/auth/actions";
-import { isActive, PHONE_TABS, PRIMARY_NAV, SECONDARY_NAV, type NavCounts, type NavItem } from "./nav-items";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { isActive, MORE_ICON, MORE_NAV, PHONE_TABS, PRIMARY_NAV, SECONDARY_NAV, type NavCounts, type NavItem } from "./nav-items";
 
 function NavLink({ item, pathname, counts }: { item: NavItem; pathname: string; counts?: NavCounts }) {
   const active = isActive(pathname, item.href);
@@ -84,32 +86,64 @@ export function Sidebar({
   );
 }
 
-/** Phone navigation (≤640px): a fixed bottom tab bar. */
+/** Phone navigation (≤640px): a fixed bottom tab bar, with a sheet for the rest. */
 export function BottomTabs() {
   const pathname = usePathname();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreActive = MORE_NAV.some((item) => isActive(pathname, item.href));
+  const tabClass = (active: boolean) =>
+    cn("flex flex-col items-center justify-center gap-1 text-[11px] font-medium text-muted-2", active && "text-primary");
   return (
-    <nav
-      aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-40 grid h-[62px] grid-cols-4 border-t bg-card pb-[env(safe-area-inset-bottom)] sm:hidden"
-    >
-      {PHONE_TABS.map((item) => {
-        const active = isActive(pathname, item.href);
-        const Icon = item.icon;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "flex flex-col items-center justify-center gap-1 text-[11px] font-medium text-muted-2",
-              active && "text-primary",
-            )}
-          >
-            <Icon className="size-5" strokeWidth={1.6} />
-            {item.label}
-          </Link>
-        );
-      })}
-    </nav>
+    <>
+      <nav
+        aria-label="Main"
+        className="fixed inset-x-0 bottom-0 z-40 grid h-[62px] grid-cols-4 border-t bg-card pb-[env(safe-area-inset-bottom)] sm:hidden"
+      >
+        {PHONE_TABS.map((item) => {
+          const active = isActive(pathname, item.href);
+          const Icon = item.icon;
+          return (
+            <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={tabClass(active)}>
+              <Icon className="size-5" strokeWidth={1.6} />
+              {item.label}
+            </Link>
+          );
+        })}
+        <button type="button" className={tabClass(moreActive)} onClick={() => setMoreOpen(true)} aria-haspopup="dialog">
+          <MORE_ICON className="size-5" strokeWidth={1.6} />
+          More
+        </button>
+      </nav>
+      <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
+        <SheetContent side="bottom" className="rounded-t-[18px] pb-[max(16px,env(safe-area-inset-bottom))]">
+          <SheetHeader>
+            <SheetTitle>More</SheetTitle>
+            <SheetDescription className="sr-only">Other sections</SheetDescription>
+          </SheetHeader>
+          <nav aria-label="More" className="flex flex-col px-2">
+            {MORE_NAV.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMoreOpen(false)}
+                  className="flex h-12 items-center gap-3 rounded-md px-3 text-[15px] font-medium hover:bg-divider"
+                >
+                  <Icon className="size-5 text-muted-2" strokeWidth={1.6} />
+                  {item.label}
+                </Link>
+              );
+            })}
+            <form action={signOutAction}>
+              <button type="submit" className="flex h-12 w-full items-center gap-3 rounded-md px-3 text-[15px] font-medium hover:bg-divider">
+                <LogOutIcon className="size-5 text-muted-2" strokeWidth={1.6} />
+                Sign out
+              </button>
+            </form>
+          </nav>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }

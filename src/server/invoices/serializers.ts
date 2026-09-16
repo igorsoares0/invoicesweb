@@ -1,14 +1,15 @@
 import type { Invoice, InvoiceItem } from "@/generated/prisma/client";
 import type { InvoiceDto, InvoiceItemDto, InvoiceListItemDto } from "@/lib/api-types";
 import { toIsoDate, type IsoDate } from "@/lib/dates";
-import { findIssueProblems } from "@/lib/invoices/issues";
-import type { LineInput } from "@/lib/invoices/math";
+import { findIssueProblems } from "@/lib/documents/issues";
+import type { LineInput } from "@/lib/documents/math";
 import { displayStatus } from "@/lib/invoices/status";
 import type { InvoiceDetail } from "@/server/repositories/invoice-repository";
 
 const money = (value: { toFixed(digits: number): string }) => value.toFixed(2);
 
-export function toItemDto(item: InvoiceItem): InvoiceItemDto {
+/** Works for invoice and estimate lines alike; both tables share these columns. */
+export function toItemDto(item: Omit<InvoiceItem, "invoiceId">): InvoiceItemDto {
   return {
     id: item.id,
     productId: item.productId,
@@ -112,8 +113,9 @@ export function toInvoiceDto(invoice: InvoiceDetail, today: IsoDate): InvoiceDto
     })),
     issues:
       invoice.status === "DRAFT"
-        ? findIssueProblems({ clientId: invoice.clientId, issueDate: base.issueDate, dueDate: base.dueDate, items })
+        ? findIssueProblems({ clientId: invoice.clientId, issueDate: base.issueDate, endDate: base.dueDate, items })
         : [],
+    fromEstimate: invoice.fromEstimate,
     updatedAt: invoice.updatedAt.toISOString(),
   };
 }

@@ -53,6 +53,7 @@ export const updateBusinessSchema = z
     estimatePrefix: documentPrefix,
     estimateNextNumber: sequenceNumber,
     paymentInstructions: optionalText(1000),
+    estimateValidityDays: z.coerce.number().int("Enter a whole number").min(1, "Must be 1 or more").max(365, "Use at most 365 days"),
   })
   .partial();
 

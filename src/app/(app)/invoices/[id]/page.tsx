@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { InvoiceDetail } from "@/features/invoices/detail/invoice-detail";
-import { InvoiceEditor } from "@/features/invoices/editor/invoice-editor";
+import { DocumentEditor } from "@/features/documents/editor/document-editor";
+import { toEditable } from "@/features/documents/editor/kinds";
 import { todayIn } from "@/lib/dates";
 import { ApiError } from "@/server/api/errors";
 import { requireBusiness } from "@/server/auth/session";
-import { documentParties, invoiceViewFrom } from "@/server/invoices/document";
+import { documentParties, invoiceViewFrom } from "@/server/documents/render";
 import { invoiceRepository } from "@/server/repositories/invoice-repository";
 import { clientService } from "@/server/services/client-service";
 import { invoiceService } from "@/server/services/invoice-service";
@@ -29,13 +30,19 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
       productService.list(context, { limit: 100, sort: "name" }),
     ]);
     return (
-      <InvoiceEditor
+      <DocumentEditor
         key={invoice.id}
-        initial={invoice}
+        kind="invoice"
+        initial={toEditable(invoice)}
         issuer={business}
         clients={clients.data}
         products={products.data}
         defaultTaxRate={business.defaultTaxRate}
+        origin={
+          invoice.fromEstimate
+            ? { href: `/estimates/${invoice.fromEstimate.id}`, label: `Converted from ${invoice.fromEstimate.number}` }
+            : undefined
+        }
       />
     );
   }
