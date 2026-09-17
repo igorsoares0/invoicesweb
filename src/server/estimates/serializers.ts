@@ -1,8 +1,9 @@
-import type { Estimate } from "@/generated/prisma/client";
+import type { EmailLog, Estimate } from "@/generated/prisma/client";
 import type { EstimateDto, EstimateListItemDto } from "@/lib/api-types";
 import { toIsoDate, type IsoDate } from "@/lib/dates";
 import { findIssueProblems } from "@/lib/documents/issues";
 import { displayEstimateStatus } from "@/lib/estimates/status";
+import { toEmailLogDto } from "@/server/email/serializers";
 import { toItemDto } from "@/server/invoices/serializers";
 import type { EstimateDetail } from "@/server/repositories/estimate-repository";
 
@@ -31,7 +32,7 @@ export function toEstimateListItemDto(
   return { ...baseFields(estimate, today), client: estimate.client, summary: estimate.items[0]?.description || null };
 }
 
-export function toEstimateDto(estimate: EstimateDetail, today: IsoDate): EstimateDto {
+export function toEstimateDto(estimate: EstimateDetail & { emails?: EmailLog[] }, today: IsoDate): EstimateDto {
   const items = estimate.items.map(toItemDto);
   const base = baseFields(estimate, today);
   return {
@@ -73,6 +74,7 @@ export function toEstimateDto(estimate: EstimateDetail, today: IsoDate): Estimat
             { endPath: "expiryDate", endLabel: "Expiry date" },
           )
         : [],
+    emails: (estimate.emails ?? []).map(toEmailLogDto),
     updatedAt: estimate.updatedAt.toISOString(),
   };
 }

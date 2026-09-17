@@ -86,6 +86,15 @@ export function Sidebar({
   );
 }
 
+/**
+ * One document per screen: the editor and detail views are focused flows with their own
+ * bottom bar and a back link in the header (design g3), so the tab bar would sit on top of
+ * the send button.
+ */
+function isFocusedDocument(pathname: string) {
+  return /^\/(invoices|estimates)\/[^/]+$/.test(pathname);
+}
+
 /** Phone navigation (≤640px): a fixed bottom tab bar, with a sheet for the rest. */
 export function BottomTabs() {
   const pathname = usePathname();
@@ -93,6 +102,9 @@ export function BottomTabs() {
   const moreActive = MORE_NAV.some((item) => isActive(pathname, item.href));
   const tabClass = (active: boolean) =>
     cn("flex flex-col items-center justify-center gap-1 text-[11px] font-medium text-muted-2", active && "text-primary");
+
+  if (isFocusedDocument(pathname)) return null;
+
   return (
     <>
       <nav

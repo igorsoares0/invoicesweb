@@ -14,4 +14,24 @@ describe("describeEvent", () => {
     expect(describeEvent(event("CREATED"), "USD").label).toBe("Created — number assigned");
     expect(describeEvent(event("DUPLICATED", { fromNumber: "INV-0040" }), "USD").label).toBe("Duplicated from INV-0040");
   });
+
+  it("reads a sent event by its channel, so one action is one line", () => {
+    expect(describeEvent(event("SENT", { channel: "manual" }), "USD").label).toBe("Marked as sent");
+    expect(describeEvent(event("SENT", { channel: "email", to: ["billing@pineco.com"] }), "USD").label).toBe(
+      "Emailed to billing@pineco.com",
+    );
+  });
+
+  it("summarises extra recipients", () => {
+    const sent = event("EMAIL_SENT", { to: ["billing@pineco.com", "ana@pineco.com", "ops@pineco.com"] });
+    expect(describeEvent(sent, "USD").label).toBe("Emailed to billing@pineco.com +2");
+  });
+
+  it("shows why an email failed, in danger tone", () => {
+    expect(describeEvent(event("EMAIL_FAILED", { reason: "the address was rejected" }), "USD")).toEqual({
+      label: "Email failed — the address was rejected",
+      tone: "danger",
+    });
+    expect(describeEvent(event("EMAIL_FAILED"), "USD").label).toBe("Email failed");
+  });
 });

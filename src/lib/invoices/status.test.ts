@@ -53,3 +53,16 @@ describe("statusAfterPayment", () => {
     expect(statusAfterPayment("1000.00", "0.00", true)).toBe("VIEWED");
   });
 });
+
+describe("emailing", () => {
+  it("is allowed in every status but cancelled", () => {
+    for (const status of ["DRAFT", "SENT", "VIEWED", "PARTIALLY_PAID", "PAID"] as const) {
+      expect(canPerform(status, "email")).toBe(true);
+    }
+    expect(canPerform("CANCELLED", "email")).toBe(false);
+  });
+
+  it("does not widen sending itself", () => {
+    expect(canPerform("SENT", "send")).toBe(false);
+  });
+});

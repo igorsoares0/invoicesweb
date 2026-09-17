@@ -12,7 +12,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 Invoice and estimate SaaS for freelancers and small businesses. The product spec is `docs/Invoice Maker — Spec-Driven Development.md` (Portuguese); where the code deliberately differs from it, `docs/decisions.md` wins. The visual source of truth is `docs/design_handoff_invoice_maker_web/` (tokens in its README, screenshots a1–g5).
 
-Status: phases 1–3 (foundation, invoicing, estimates) are done. Next: phase 4 (email via Resend), then phase 5 (billing and plan gating).
+Status: phases 1–4 (foundation, invoicing, estimates, email via Resend) are done. Next: phase 5 (billing and plan gating).
 
 ## Working rules
 
@@ -53,4 +53,5 @@ Status: phases 1–3 (foundation, invoicing, estimates) are done. Next: phase 4 
 - **Statuses:** OVERDUE (invoices) and EXPIRED (estimates) are derived on read and never stored. Allowed actions per status live in `src/lib/invoices/status.ts` and `src/lib/estimates/status.ts`; PATCH never changes status.
 - **Invoices and estimates share one document layer:** `DOCUMENT_KINDS` (`src/features/documents/editor/kinds.ts`) configures the shared editor. `src/features/documents/document-templates.tsx` with `DOCUMENT_CSS` (`document-styles.ts`) is the single template source for the editor preview, the public pages and the PDF (`src/server/documents/render.ts`, headless Chromium). A new template or layout change must look right in all three.
 - **Plan limits** live in `src/server/entitlements/plans.ts` and are exposed through `/api/v1/me`. They are not enforced yet; enforcement comes with phase 5.
+- **Email:** `src/server/email/transport.ts` picks the transport — Resend with a key, `capture` (no network) when `EMAIL_TRANSPORT=capture`, none otherwise (`isEmailEnabled()` is threaded into client components as a prop). The send transition commits before the provider is called, so a failed email is an outcome (200 with `email.status: "FAILED"`), never an exception; each attempt is a row in `EmailLog`. Never let a test run reach the real provider: both runners set `EMAIL_TRANSPORT=capture`.
 - **Auth:** Auth.js v5 with JWT sessions. `src/proxy.ts` (Next 16's replacement for middleware) guards pages; public paths are listed in `src/lib/proxy-rules.ts`.

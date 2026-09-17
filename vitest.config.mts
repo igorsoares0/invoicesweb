@@ -42,7 +42,8 @@ export default defineConfig({
           name: "integration",
           environment: "node",
           include: ["src/**/*.int.test.ts"],
-          env: { DATABASE_URL: process.env.DATABASE_URL_TEST ?? "" },
+          // EMAIL_TRANSPORT is explicit: `.env` is loaded above, so a real key must never send.
+          env: { DATABASE_URL: process.env.DATABASE_URL_TEST ?? "", EMAIL_TRANSPORT: "capture" },
           globalSetup: ["tests/setup/integration-global-setup.ts"],
           setupFiles: ["tests/setup/integration.ts"],
           // Tests share one database, so files must not run concurrently.

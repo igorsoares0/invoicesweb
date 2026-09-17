@@ -20,6 +20,7 @@ import type { BusinessContext } from "@/server/auth/types";
 import { db } from "@/server/db";
 import { documentItemRow } from "@/server/documents/lines";
 import { generatePublicToken } from "@/server/documents/public-token";
+import type { SendChannel } from "@/server/documents/send-channel";
 import { documentParties, estimateViewFrom, renderDocumentPdf } from "@/server/documents/render";
 import { billToSnapshot, issuerSnapshot } from "@/server/documents/snapshots";
 import { toEstimateDto, toEstimateListItemDto } from "@/server/estimates/serializers";
@@ -36,6 +37,7 @@ const MESSAGES: Record<EstimateAction, string> = {
   edit: "Only drafts can be edited. Duplicate this estimate to change it.",
   delete: "Only drafts can be deleted.",
   send: "This estimate was already sent.",
+  email: "This estimate can no longer be emailed — it expired or was already converted.",
   accept: "This estimate can't be accepted anymore.",
   decline: "This estimate can't be declined anymore.",
   reopen: "Only a declined estimate that is still valid can be reopened.",
@@ -221,7 +223,7 @@ export const estimateService = {
     });
   },
 
-  async send(context: BusinessContext, id: string): Promise<EstimateDto> {
+  async send(context: BusinessContext, id: string, channel: SendChannel = { channel: "manual" }): Promise<EstimateDto> {
     await transition(context, id, async (tx, estimate, day) => {
       assertCan(estimate, "send", day);
       const detail = await loadDetail(context, id, tx);
@@ -253,7 +255,7 @@ export const estimateService = {
           billToSnapshot: billToSnapshot(client) as unknown as Prisma.InputJsonValue,
         },
       });
-      await estimateRepository.addEvent(tx, id, "SENT", { channel: "manual" });
+      await estimateRepository.addEvent(tx, id, "SENT", { ...channel });
     });
     return this.get(context, id);
   },

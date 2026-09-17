@@ -14,7 +14,7 @@ export default async function globalSetup() {
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   await client.query(
-    'TRUNCATE TABLE "EstimateEvent", "EstimateItem", "Estimate", "InvoiceEvent", "Payment", "InvoiceItem", "Invoice", "Product", "Client", "Business", "Account", "Session", "VerificationToken", "User" CASCADE',
+    'TRUNCATE TABLE "EmailLog", "EstimateEvent", "EstimateItem", "Estimate", "InvoiceEvent", "Payment", "InvoiceItem", "Invoice", "Product", "Client", "Business", "Account", "Session", "VerificationToken", "User" CASCADE',
   );
   await client.end();
 }

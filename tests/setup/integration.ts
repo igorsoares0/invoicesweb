@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, vi } from "vitest";
 import { db } from "@/server/db";
 import { resetRateLimits } from "@/server/auth/rate-limit";
+import { clearCapturedEmails } from "@/server/email/transport";
 import { closePdfRenderer } from "@/server/pdf/pdf-renderer";
 import { authState } from "./auth-state";
 import { truncateAll } from "./db";
@@ -21,6 +22,7 @@ vi.mock("@/server/auth/context", async () => {
 });
 
 beforeEach(async () => {
+  clearCapturedEmails();
   await truncateAll();
   resetRateLimits();
   authState.userId = null;

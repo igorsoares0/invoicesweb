@@ -28,9 +28,10 @@ export async function readyDraft(page: Page, client: string, description = "Webs
   await waitForSaved(page);
 }
 
+/** Opens the send dialog and takes the "no email" path. Test ids keep this stable as the dialog grows. */
 export async function markAsSent(page: Page) {
-  await page.getByRole("button", { name: "Send invoice" }).click();
-  await page.getByRole("button", { name: "Mark as sent" }).click();
+  await page.getByTestId("send-trigger").filter({ visible: true }).click();
+  await page.getByTestId("mark-as-sent").click();
   await expect(page.getByTestId("public-link")).toBeVisible();
   return (await page.getByTestId("public-link").getAttribute("href"))!;
 }

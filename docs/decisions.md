@@ -4,7 +4,7 @@ The product spec (`Invoice Maker — Spec-Driven Development.md`) describes what
 
 Add an entry whenever a phase makes a decision the spec doesn't cover. Section numbers (§) refer to the spec.
 
-Phases 1–3 are done (foundation, invoicing, estimates).
+Phases 1–4 are done (foundation, invoicing, estimates, email).
 
 ## Structure and routes
 
@@ -12,6 +12,7 @@ Phases 1–3 are done (foundation, invoicing, estimates).
 - **Layout (§41):** `src/lib` holds framework-free code shared by the client and the server (validation, money, dates, status rules). Server-only code lives under `src/server` (`api`, `auth`, `services`, `repositories`, `documents`, `pdf`, `entitlements`). `src/features/documents` holds what invoices and estimates share (editor, templates, detail cards), and `src/features/invoices` and `src/features/estimates` only add what's specific to each.
 - **`proxy.ts`** guards pages instead of `middleware.ts`, which is deprecated in Next 16.
 - **Onboarding:** after sign-up, users without a business go to `/onboarding` before reaching the app.
+- **On a phone, a document screen hides the bottom tab bar** (`/invoices/:id`, `/estimates/:id`). The editor has its own fixed bar with the total and the send button (design g3), and the tab bar would sit on top of it; the header's back link is the way out.
 
 ## Data model
 
@@ -29,7 +30,9 @@ Phases 1–3 are done (foundation, invoicing, estimates).
 - **Line items (§8, §10)** also store `productId`, `discountType` (`PERCENT`/`FIXED`) with `discountValue`, and `taxExempt` with `taxExemptReason`. `unitPrice` may be null on a draft line; sending requires it.
 - **Payments** have an optional `idempotencyKey`, unique per invoice (§52).
 - **Events:** besides the spec's examples (§12), invoices log `PAYMENT_REMOVED`, `LINK_REVOKED` and `DUPLICATED`. Estimates have their own `EstimateEvent` table: `CREATED`, `SENT`, `VIEWED`, `ACCEPTED`, `DECLINED`, `REOPENED`, `CONVERTED`, `LINK_REVOKED`, `DUPLICATED`. The `MARKED_PAID` example isn't a separate type: marking an invoice paid records a payment for the balance, which logs `PAYMENT_ADDED`.
-- **Not yet in the schema:** `EmailLog` (phase 4) and `Subscription` (phase 5).
+- **`EmailLog` (§13) carries four fields the spec doesn't list:** `recipients` (the design's To field takes several addresses, and `recipient` keeps the spec's singular reading as the first of them), `subject`, `attachedPdf`/`copyToSelf` (what the sender chose), and `error` (why it failed, in words meant for the user — the provider's own wording only reaches the logs). A database CHECK constraint enforces that a row belongs to exactly one document, an invoice or an estimate.
+- **`EmailStatus` starts at `QUEUED`**, which means the row exists but the provider hasn't answered. Sending is synchronous, so a row that stays QUEUED means the process died mid-send; it is never read as delivered. `DELIVERED`/`OPENED` wait for provider webhooks.
+- **Not yet in the schema:** `Subscription` (phase 5).
 
 ## Statuses and transitions
 
@@ -99,12 +102,28 @@ Phases 1–3 are done (foundation, invoicing, estimates).
 - **Templates:** all five templates are built. Free-plan template limits aren't enforced yet (see below).
 - **Payment instructions** from Settings print on invoices only. Estimates show "Scope & terms" instead.
 
+## Email (§13, §39, §40, §71)
+
+- **`/email` is its own endpoint**, next to `/send`. `POST /api/v1/{invoices,estimates}/:id/email` sends a draft first (the existing transition: status, snapshots, public link) and then emails it; `/send` keeps meaning "mark as sent, I'll share the link myself". Two endpoints keep both paths honest and leave the older contract untouched.
+- **A provider failure is an outcome, not an error.** The send transition commits before the provider is called, so the document is already sent when an email fails. The route answers 200 with `{ data: { invoice | estimate, email } }` and `email.status` is `SENT` or `FAILED` — the error envelope has no room for data, and the UI needs the document back to offer a retry. Only pre-flight problems throw: unauthenticated (401), not found (404), wrong status (409), invalid input or an unready draft (422), rate limit (429), no transport configured (503 `EMAIL_DISABLED`).
+- **A failed PDF takes the same path.** The attachment was asked for, so sending without it would misrepresent what the client received.
+- **One action, one history line.** `send()` takes a channel and stores it on the `SENT` event, so a first send reads "Emailed to …" (design b3) and a hand-shared one reads "Marked as sent". `EMAIL_SENT` is only for re-sends; `EMAIL_FAILED` is added whenever an attempt fails, which is what keeps the pair of lines honest.
+- **Idempotency (§52):** the `EmailLog` row is created before the send and its id becomes the key (`invoice-email/<id>`). One row per attempt means a retry of *that* attempt can't send twice, while a legitimate re-send with edited text never collides. Keying on the document id would let Resend silently swallow a real re-send within 24h.
+- **Re-sending is a new action** (`email` in both status modules), allowed in every status except cancelled invoices, expired estimates (the client can't answer any more) and converted ones. It never re-freezes the snapshot or changes the status. A revoked public link is recreated first, so an email never carries a dead link.
+- **Sender:** the sandbox `onboarding@resend.dev` until a domain is verified, with the business name in front of it. `replyTo` is always the business (or account) address — without it, a client's reply would go to the provider.
+- **Email sending is not a Pro feature**, though spec §49 lists it as one. The design gives the Free plan five invoices a month that it can actually send, and its pricing table gates only automatic reminders. The dialog shows that reminder toggle disabled with its `PRO` chip, and nothing is persisted for it.
+- **A client without an email doesn't block anything.** It isn't an issue in `findIssueProblems`, since that would also block the PDF and "mark as sent"; the dialog opens with an empty To field and a hint, so you can send the document to yourself.
+- **The email template shares no CSS with the PDF.** Gmail clips messages near 102 KB, so the email is a small inline-styled table with no embedded fonts — only the data is shared.
+- **The email log is not in the shared detail include.** `invoiceDetailInclude` also feeds the public page, which has no business loading recipient addresses; the owner's read uses `invoiceOwnerInclude`/`estimateOwnerInclude`, with an integration test guarding the public payload.
+- **Not in this phase:** reminders (manual or scheduled) and the design's working "Send reminder" button; provider webhooks and the `DELIVERED`/`OPENED` states; the Settings → Email sub-page the design lists as "not yet designed" (defaults live in `src/lib/documents/email-text.ts` for now); the plan-limit modal, which needs the phase 5 gating.
+- **Test transport:** `EMAIL_TRANSPORT=capture` records emails instead of sending them and is set explicitly by both test runners, because they load `.env` and a real key would otherwise reach the provider. The transport also refuses to build a real client against a `*_test` database. E2E asserts through `EmailLog` — the capture buffer lives in the built server's own process.
+
 ## Phasing
 
-- **Pulled into phase 2:** manual payments and "mark as sent", which publishes the public link without emailing it. Phase 4 adds the email itself.
+- **Pulled into phase 2:** manual payments and "mark as sent", which publishes the public link without emailing it. Phase 4 added the email itself.
 - **Estimate decisions (phase 3):** estimates lock after sending, and conversion requires ACCEPTED.
 - **Plan limits (§49, §50):** defined in `src/server/entitlements/plans.ts` and returned by `/api/v1/me`, but not enforced; phase 5 adds enforcement. Until billing exists, everyone is on FREE with an ACTIVE status.
-- **Not built yet:** email (phase 4); billing, subscriptions and webhooks (phase 5); logo upload; reports; global search; languages other than English.
+- **Not built yet:** billing, subscriptions and webhooks (phase 5); payment reminders; logo upload; reports; global search; languages other than English.
 
 ## Development environment
 

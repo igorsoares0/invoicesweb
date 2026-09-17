@@ -13,6 +13,12 @@ export const estimateDetailInclude = {
 
 export type EstimateDetail = Prisma.EstimateGetPayload<{ include: typeof estimateDetailInclude }>;
 
+/** The owner's view adds the email log; the public include stays without it. */
+export const estimateOwnerInclude = {
+  ...estimateDetailInclude,
+  emails: { orderBy: { createdAt: "desc" }, take: 20 },
+} satisfies Prisma.EstimateInclude;
+
 const AWAITING: EstimateStatus[] = ["SENT", "VIEWED"];
 
 function filterWhere(filter: ListEstimatesQuery["status"], today: Date): Prisma.EstimateWhereInput {
@@ -80,7 +86,7 @@ export const estimateRepository = {
   },
 
   findDetail(businessId: string, id: string, client: Tx | typeof db = db) {
-    return client.estimate.findFirst({ where: { id, businessId }, include: estimateDetailInclude });
+    return client.estimate.findFirst({ where: { id, businessId }, include: estimateOwnerInclude });
   },
 
   findByPublicToken(token: string) {

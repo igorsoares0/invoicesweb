@@ -1,9 +1,10 @@
-import type { Invoice, InvoiceItem } from "@/generated/prisma/client";
+import type { EmailLog, Invoice, InvoiceItem } from "@/generated/prisma/client";
 import type { InvoiceDto, InvoiceItemDto, InvoiceListItemDto } from "@/lib/api-types";
 import { toIsoDate, type IsoDate } from "@/lib/dates";
 import { findIssueProblems } from "@/lib/documents/issues";
 import type { LineInput } from "@/lib/documents/math";
 import { displayStatus } from "@/lib/invoices/status";
+import { toEmailLogDto } from "@/server/email/serializers";
 import type { InvoiceDetail } from "@/server/repositories/invoice-repository";
 
 const money = (value: { toFixed(digits: number): string }) => value.toFixed(2);
@@ -68,7 +69,8 @@ export function toInvoiceListItemDto(
   };
 }
 
-export function toInvoiceDto(invoice: InvoiceDetail, today: IsoDate): InvoiceDto {
+/** `emails` is only present on the owner's read; the public page never loads it. */
+export function toInvoiceDto(invoice: InvoiceDetail & { emails?: EmailLog[] }, today: IsoDate): InvoiceDto {
   const items = invoice.items.map(toItemDto);
   const base = baseFields(invoice, today);
   return {
@@ -116,6 +118,7 @@ export function toInvoiceDto(invoice: InvoiceDetail, today: IsoDate): InvoiceDto
         ? findIssueProblems({ clientId: invoice.clientId, issueDate: base.issueDate, endDate: base.dueDate, items })
         : [],
     fromEstimate: invoice.fromEstimate,
+    emails: (invoice.emails ?? []).map(toEmailLogDto),
     updatedAt: invoice.updatedAt.toISOString(),
   };
 }

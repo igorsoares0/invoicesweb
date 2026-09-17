@@ -37,7 +37,7 @@ import { IssuesBanner } from "./issues-banner";
 import { LineGrid } from "./line-grid";
 import { PhoneLineSheet } from "./phone-line-sheet";
 import { SaveStatusText } from "./save-status";
-import { SendDialog } from "./send-dialog";
+import { SendDialog, type SendEmailInput, type SendEmailOutcome } from "./send-dialog";
 import { AccentSwatches, TemplatePicker } from "./template-picker";
 import { DOCUMENT_KINDS, type EditableDocument } from "./kinds";
 import { useDocumentDraft } from "./use-document-draft";
@@ -55,6 +55,7 @@ export function DocumentEditor({
   clients: initialClients,
   products,
   defaultTaxRate,
+  emailEnabled,
   origin,
 }: {
   /** Where this document came from, e.g. the estimate an invoice was converted from. */
@@ -65,6 +66,8 @@ export function DocumentEditor({
   clients: ClientDto[];
   products: ProductDto[];
   defaultTaxRate: string | null;
+  /** False when no email transport is configured: the dialog then only marks as sent. */
+  emailEnabled: boolean;
 }) {
   const router = useRouter();
   const config = DOCUMENT_KINDS[kind];
@@ -174,7 +177,7 @@ export function DocumentEditor({
     link.click();
   }
 
-  async function send(): Promise<string | null> {
+  async function markSent(): Promise<string | null> {
     const saved = await flush();
     if (!saved) return "Save the draft first — some fields need fixing.";
     try {
@@ -185,6 +188,25 @@ export function DocumentEditor({
       return null;
     } catch (error) {
       return error instanceof ApiClientError ? error.message : `Couldn't send the ${labels.noun}`;
+    }
+  }
+
+  /** Returns the attempt's outcome, or a message when the request itself was refused. */
+  async function sendEmail(input: SendEmailInput): Promise<SendEmailOutcome | string> {
+    const saved = await flush();
+    if (!saved) return "Save the draft first — some fields need fixing.";
+    try {
+      const { email } = await api.post<{ email: SendEmailOutcome }>(`${apiBase}/${invoice.id}/email`, input);
+      // Refreshing now would swap the editor for the detail view and take the dialog — and its
+      // "sent, but the email failed" message — with it. On failure the dialog stays for a retry;
+      // closing it refreshes instead.
+      if (email.status === "SENT") {
+        toast.success(`${invoice.number} emailed to ${input.to[0]}`);
+        router.refresh();
+      }
+      return email;
+    } catch (error) {
+      return error instanceof ApiClientError ? error.message : `Couldn't email the ${labels.noun}`;
     }
   }
 
@@ -421,7 +443,12 @@ export function DocumentEditor({
           <Button variant="outline" className="hidden sm:inline-flex" disabled={!ready} onClick={downloadPdf}>
             Download PDF
           </Button>
-          <Button className="hidden sm:inline-flex" disabled={!ready} onClick={() => setSendOpen(true)}>
+          <Button
+            className="hidden sm:inline-flex"
+            data-testid="send-trigger"
+            disabled={!ready}
+            onClick={() => setSendOpen(true)}
+          >
             {labels.send}
           </Button>
           {menu}
@@ -565,7 +592,12 @@ export function DocumentEditor({
             <p className="text-[12px] text-muted-foreground">Total due</p>
             <p className="text-[21px] leading-tight font-bold">{formatMoney(totals.total, draft.currency)}</p>
           </div>
-          <Button className="h-[46px] w-[190px]" disabled={!ready} onClick={() => setSendOpen(true)}>
+          <Button
+            className="h-[46px] w-[190px]"
+            data-testid="send-trigger"
+            disabled={!ready}
+            onClick={() => setSendOpen(true)}
+          >
             {labels.send}
           </Button>
         </div>
@@ -608,17 +640,26 @@ export function DocumentEditor({
         currency={draft.currency}
         onPick={addProduct}
       />
-      <SendDialog
-        open={sendOpen}
-        onOpenChange={setSendOpen}
-        number={invoice.number}
-        total={totals.total}
-        currency={draft.currency}
-        endDate={draft.endDate}
-        kind={kind}
-        clientEmail={client?.email ?? null}
-        onConfirm={send}
-      />
+      {sendOpen ? (
+        <SendDialog
+          open
+          onOpenChange={(open) => {
+            setSendOpen(open);
+            if (!open) router.refresh();
+          }}
+          number={invoice.number}
+          total={totals.total}
+          currency={draft.currency}
+          endDate={draft.endDate}
+          kind={kind}
+          clientName={client?.name ?? null}
+          clientEmail={client?.email ?? null}
+          businessName={issuer.name}
+          emailEnabled={emailEnabled}
+          onSendEmail={sendEmail}
+          onMarkSent={markSent}
+        />
+      ) : null}
       <ConfirmDeleteDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}

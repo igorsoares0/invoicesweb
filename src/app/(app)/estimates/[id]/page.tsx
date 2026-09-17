@@ -8,6 +8,7 @@ import { formatDocumentNumber } from "@/lib/numbering";
 import { firstValues } from "@/lib/url";
 import { ApiError } from "@/server/api/errors";
 import { requireBusiness } from "@/server/auth/session";
+import { isEmailEnabled } from "@/server/email/transport";
 import { documentParties, estimateViewFrom } from "@/server/documents/render";
 import { estimateRepository } from "@/server/repositories/estimate-repository";
 import { clientService } from "@/server/services/client-service";
@@ -41,6 +42,7 @@ export default async function EstimatePage({ params, searchParams }: PageProps<"
         clients={clients.data}
         products={products.data}
         defaultTaxRate={business.defaultTaxRate}
+        emailEnabled={isEmailEnabled()}
       />
     );
   }
@@ -57,6 +59,8 @@ export default async function EstimatePage({ params, searchParams }: PageProps<"
       nextInvoiceNumber={formatDocumentNumber(business.invoicePrefix, business.invoiceNextNumber)}
       paymentTermsDays={business.paymentTermsDays}
       openConvert={query.convert === "1"}
+      businessName={business.name}
+      emailEnabled={isEmailEnabled()}
     />
   );
 }

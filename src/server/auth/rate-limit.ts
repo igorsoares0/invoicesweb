@@ -69,10 +69,14 @@ export const signUpLimiter = createRateLimiter({ limit: 10, windowMs: FIFTEEN_MI
 /** Public document links: page views and PDF downloads per IP. */
 export const publicDocumentLimiter = createRateLimiter({ limit: 60, windowMs: 60 * 1000 });
 
+/** Outgoing document emails per business: a held Enter key must not spam a client. */
+export const documentEmailLimiter = createRateLimiter({ limit: 20, windowMs: 60 * 60 * 1000 });
+
 export function resetRateLimits() {
   signInLimiter.clear();
   signUpLimiter.clear();
   publicDocumentLimiter.clear();
+  documentEmailLimiter.clear();
 }
 
 /** Best-effort client IP. Only trustworthy behind a reverse proxy that overwrites the header. */

@@ -60,6 +60,7 @@ const invoice: InvoiceDto = {
   events: [],
   issues: [],
   fromEstimate: null,
+  emails: [],
   updatedAt: "2026-09-12T10:00:00.000Z",
 };
 

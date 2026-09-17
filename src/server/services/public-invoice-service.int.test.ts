@@ -56,6 +56,25 @@ describe("publicInvoiceService.find", () => {
     expect(serialized).not.toContain("businessId");
   });
 
+  it("never loads the email log, which is the owner's business", async () => {
+    const { token, invoice, context } = await sentInvoice();
+    await db.emailLog.create({
+      data: {
+        businessId: context.businessId,
+        invoiceId: invoice.id,
+        type: "INVOICE",
+        status: "SENT",
+        recipient: "billing@pineco.com",
+        recipients: ["billing@pineco.com", "ceo@pineco.com"],
+        subject: "Invoice from Alvorada Studio",
+      },
+    });
+
+    const found = await publicInvoiceService.find(token);
+
+    expect(JSON.stringify(found)).not.toContain("ceo@pineco.com");
+  });
+
   it("labels overdue and partially paid invoices", async () => {
     const { token, invoice } = await sentInvoice({ issueDate: "2026-01-01", dueDate: "2026-01-15" });
     expect(await publicInvoiceService.find(token)).toMatchObject({ status: { tone: "overdue" } });

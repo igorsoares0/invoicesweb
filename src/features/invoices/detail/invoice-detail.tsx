@@ -21,7 +21,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { FittedDocument } from "@/features/documents/fitted-document";
 import { DocumentStyles, PrintedDocument } from "@/features/documents/document-templates";
-import { api } from "@/lib/api-client";
+import { api, ApiClientError } from "@/lib/api-client";
 import type { InvoiceDto } from "@/lib/api-types";
 import { daysBetween, formatDate, formatTimestamp } from "@/lib/dates";
 import type { DocumentView } from "@/lib/documents/view";
@@ -31,6 +31,7 @@ import { canPerform } from "@/lib/invoices/status";
 import { formatMoney } from "@/lib/money";
 import { DetailCard } from "@/features/documents/detail/detail-card";
 import { PublicLinkCard } from "@/features/documents/detail/public-link-card";
+import { SendDialog, type SendEmailInput, type SendEmailOutcome } from "@/features/documents/editor/send-dialog";
 import { METHOD_LABELS, RecordPaymentDialog } from "./record-payment-dialog";
 
 const DOT: Record<EventTone, string> = {
@@ -46,17 +47,22 @@ export function InvoiceDetail({
   view,
   timezone,
   today,
+  businessName,
+  emailEnabled,
 }: {
   invoice: InvoiceDto;
   view: DocumentView;
   timezone: string;
   today: string;
+  businessName: string;
+  emailEnabled: boolean;
 }) {
   const router = useRouter();
   const [invoice, setInvoice] = useState(initial);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [paymentToRemove, setPaymentToRemove] = useState<string | null>(null);
+  const [emailOpen, setEmailOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const money = (value: string) => formatMoney(value, invoice.currency);
@@ -75,6 +81,26 @@ export function InvoiceDetail({
       toast.error(error instanceof Error ? error.message : "Something went wrong");
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Re-sending: the invoice is already sent, so only the email happens. */
+  async function sendEmail(input: SendEmailInput): Promise<SendEmailOutcome | string> {
+    try {
+      const { email, invoice: updated } = await api.post<{ email: SendEmailOutcome; invoice: InvoiceDto }>(
+        `/invoices/${invoice.id}/email`,
+        input,
+      );
+      setInvoice(updated);
+      // A refresh remounts this view (keyed on updatedAt) and would close the dialog, so it
+      // waits until the attempt succeeded or the user closed the dialog.
+      if (email.status === "SENT") {
+        toast.success(`${invoice.number} emailed to ${input.to[0]}`);
+        router.refresh();
+      }
+      return email;
+    } catch (error) {
+      return error instanceof ApiClientError ? error.message : "Couldn't email the invoice";
     }
   }
 
@@ -264,12 +290,27 @@ export function InvoiceDetail({
 
           <DetailCard title="Actions">
             <div className="flex flex-col gap-2 px-4 pt-2 pb-4">
+              {canPerform(invoice.status, "email") ? (
+                <Button variant="outline" size="lg" disabled={!emailEnabled} onClick={() => setEmailOpen(true)}>
+                  Email invoice
+                </Button>
+              ) : null}
               <a href={`/api/v1/invoices/${invoice.id}/pdf?download=1`} className={buttonVariants({ variant: "outline", size: "lg" })}>
                 Download PDF
               </a>
               <Button variant="outline" size="lg" onClick={duplicate}>
                 Duplicate
               </Button>
+              {canPay ? (
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="lg" className="flex-1" disabled title="Automatic reminders come with Pro">
+                    Send reminder
+                  </Button>
+                  <span className="inline-flex h-[18px] items-center rounded bg-primary-tint px-1.5 text-[10.5px] font-semibold tracking-wide text-primary">
+                    PRO
+                  </span>
+                </div>
+              ) : null}
               {canPerform(invoice.status, "cancel") ? (
                 <button
                   type="button"
@@ -292,6 +333,28 @@ export function InvoiceDetail({
           ) : null}
         </aside>
       </div>
+
+      {emailOpen ? (
+        <SendDialog
+          open
+          onOpenChange={(open) => {
+            setEmailOpen(open);
+            if (!open) router.refresh();
+          }}
+          number={invoice.number}
+          total={invoice.total}
+          currency={invoice.currency}
+          endDate={invoice.dueDate}
+          kind="invoice"
+          clientName={clientName}
+          clientEmail={invoice.client?.email ?? null}
+          businessName={businessName}
+          emailEnabled={emailEnabled}
+          alreadySent
+          onSendEmail={sendEmail}
+          onMarkSent={async () => null}
+        />
+      ) : null}
 
       {paymentOpen ? (
         <RecordPaymentDialog

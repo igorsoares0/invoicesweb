@@ -15,6 +15,17 @@ export const invoiceDetailInclude = {
 
 export type InvoiceDetail = Prisma.InvoiceGetPayload<{ include: typeof invoiceDetailInclude }>;
 
+/**
+ * The owner's view adds the email log. It is deliberately *not* in `invoiceDetailInclude`:
+ * that include also feeds the public page, which has no business loading recipient addresses.
+ */
+export const invoiceOwnerInclude = {
+  ...invoiceDetailInclude,
+  emails: { orderBy: { createdAt: "desc" }, take: 20 },
+} satisfies Prisma.InvoiceInclude;
+
+export type InvoiceOwnerDetail = Prisma.InvoiceGetPayload<{ include: typeof invoiceOwnerInclude }>;
+
 const OPEN: InvoiceStatus[] = ["SENT", "VIEWED", "PARTIALLY_PAID"];
 
 /** `today` is the business's calendar date; overdue is decided against it. */
@@ -81,7 +92,7 @@ export const invoiceRepository = {
   },
 
   findDetail(businessId: string, id: string, client: Tx | typeof db = db) {
-    return client.invoice.findFirst({ where: { id, businessId }, include: invoiceDetailInclude });
+    return client.invoice.findFirst({ where: { id, businessId }, include: invoiceOwnerInclude });
   },
 
   findByPublicToken(token: string) {

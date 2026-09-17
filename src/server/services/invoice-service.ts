@@ -19,6 +19,7 @@ import { db } from "@/server/db";
 import { documentItemRow } from "@/server/documents/lines";
 import { documentParties, invoiceViewFrom, renderDocumentPdf } from "@/server/documents/render";
 import { generatePublicToken } from "@/server/documents/public-token";
+import type { SendChannel } from "@/server/documents/send-channel";
 import { toInvoiceDto, toInvoiceListItemDto, toItemDto, toLineInput } from "@/server/invoices/serializers";
 import { billToSnapshot, issuerSnapshot } from "@/server/documents/snapshots";
 import { businessRepository } from "@/server/repositories/business-repository";
@@ -29,6 +30,7 @@ const STATUS_MESSAGES: Record<InvoiceAction, string> = {
   edit: "Only drafts can be edited. Sent invoices keep what they were issued with.",
   delete: "Only drafts can be deleted. Cancel a sent invoice instead.",
   send: "This invoice was already sent.",
+  email: "A cancelled invoice can no longer be emailed.",
   recordPayment: "Payments can only be recorded on sent invoices that still have a balance.",
   removePayment: "This invoice has no payments to remove.",
   cancel: "Invoices that already received money can't be cancelled.",
@@ -203,8 +205,11 @@ export const invoiceService = {
     await db.invoice.delete({ where: { id } });
   },
 
-  /** "Mark as sent": validates, freezes issuer and client, and publishes the link. */
-  async send(context: BusinessContext, id: string): Promise<InvoiceDto> {
+  /**
+   * "Mark as sent": validates, freezes issuer and client, and publishes the link. `channel`
+   * records how it left the building, so the history reads as one line per action (design b3).
+   */
+  async send(context: BusinessContext, id: string, channel: SendChannel = { channel: "manual" }): Promise<InvoiceDto> {
     await db.$transaction(async (tx) => {
       if (!(await invoiceRepository.lock(tx, context.businessId, id))) throw ApiError.notFound("Invoice");
       const invoice = await loadDetail(context, id, tx);
@@ -233,7 +238,7 @@ export const invoiceService = {
           amountDue: invoice.total,
         },
       });
-      await invoiceRepository.addEvent(tx, id, "SENT", { channel: "manual" });
+      await invoiceRepository.addEvent(tx, id, "SENT", { ...channel });
     });
     return this.get(context, id);
   },

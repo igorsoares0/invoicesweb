@@ -13,7 +13,8 @@ import { DetailCard } from "@/features/documents/detail/detail-card";
 import { PublicLinkCard } from "@/features/documents/detail/public-link-card";
 import { FittedDocument } from "@/features/documents/fitted-document";
 import { DocumentStyles, PrintedDocument } from "@/features/documents/document-templates";
-import { api } from "@/lib/api-client";
+import { SendDialog, type SendEmailInput, type SendEmailOutcome } from "@/features/documents/editor/send-dialog";
+import { api, ApiClientError } from "@/lib/api-client";
 import type { EstimateDto } from "@/lib/api-types";
 import { daysBetween, formatLongDate, formatShortDate, formatTimestamp } from "@/lib/dates";
 import type { DocumentView } from "@/lib/documents/view";
@@ -139,6 +140,8 @@ export function EstimateDetail({
   nextInvoiceNumber,
   paymentTermsDays,
   openConvert,
+  businessName,
+  emailEnabled,
 }: {
   estimate: EstimateDto;
   view: DocumentView;
@@ -147,14 +150,37 @@ export function EstimateDetail({
   nextInvoiceNumber: string;
   paymentTermsDays: number;
   openConvert: boolean;
+  businessName: string;
+  emailEnabled: boolean;
 }) {
   const router = useRouter();
   const [estimate, setEstimate] = useState(initial);
   const [busy, setBusy] = useState(false);
   const canConvert = canPerformEstimate(estimate, "convert", today);
   const [convertOpen, setConvertOpen] = useState(openConvert && canConvert);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const canEmail = emailEnabled && canPerformEstimate(estimate, "email", today);
   const clientName = view.billTo?.name ?? estimate.client?.name ?? null;
   const awaiting = canPerformEstimate(estimate, "accept", today);
+
+  async function sendEmail(input: SendEmailInput): Promise<SendEmailOutcome | string> {
+    try {
+      const { email, estimate: updated } = await api.post<{ email: SendEmailOutcome; estimate: EstimateDto }>(
+        `/estimates/${estimate.id}/email`,
+        input,
+      );
+      setEstimate(updated);
+      // A refresh remounts this view (keyed on updatedAt) and would close the dialog, so it
+      // waits until the attempt succeeded or the user closed the dialog.
+      if (email.status === "SENT") {
+        toast.success(`${estimate.number} emailed to ${input.to[0]}`);
+        router.refresh();
+      }
+      return email;
+    } catch (error) {
+      return error instanceof ApiClientError ? error.message : "Couldn't email the estimate";
+    }
+  }
 
   async function run(action: () => Promise<EstimateDto>, success: string) {
     setBusy(true);
@@ -208,6 +234,9 @@ export function EstimateDetail({
               <DropdownMenuItem asChild className="sm:hidden">
                 <a href={`/api/v1/estimates/${estimate.id}/pdf?download=1`}>Download PDF</a>
               </DropdownMenuItem>
+              {canEmail ? (
+                <DropdownMenuItem onSelect={() => setEmailOpen(true)}>Email estimate</DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem onSelect={duplicate}>Duplicate</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -288,6 +317,28 @@ export function EstimateDetail({
           />
         </aside>
       </div>
+
+      {emailOpen ? (
+        <SendDialog
+          open
+          onOpenChange={(open) => {
+            setEmailOpen(open);
+            if (!open) router.refresh();
+          }}
+          number={estimate.number}
+          total={estimate.total}
+          currency={estimate.currency}
+          endDate={estimate.expiryDate}
+          kind="estimate"
+          clientName={clientName}
+          clientEmail={estimate.client?.email ?? null}
+          businessName={businessName}
+          emailEnabled={emailEnabled}
+          alreadySent
+          onSendEmail={sendEmail}
+          onMarkSent={async () => null}
+        />
+      ) : null}
 
       <ConvertDialog
         open={convertOpen}

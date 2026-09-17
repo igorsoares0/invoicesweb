@@ -4,12 +4,13 @@ SaaS for freelancers and small businesses to create, send and track invoices and
 The product spec lives in [`docs/Invoice Maker — Spec-Driven Development.md`](docs/) and the
 high-fidelity design in [`docs/design_handoff_invoice_maker_web/`](docs/design_handoff_invoice_maker_web/README.md).
 
-**Status: phase 3 (estimates).** Accounts (email + password, Google), onboarding, business
+**Status: phase 4 (email).** Accounts (email + password, Google), onboarding, business
 settings, clients and the items catalog (phase 1); invoices with server-side totals, continuous
 numbering, an autosaving editor, five PDF templates, public links, manual payments and the
 overview dashboard (phase 2); estimates that clients accept or decline from a public link,
-expire on their own and convert into invoices with prices locked (phase 3). Email sending and
-billing follow in phases 4–5.
+expire on their own and convert into invoices with prices locked (phase 3); sending invoices
+and estimates by email through Resend, with the PDF attached, a logged attempt per send and
+the result on the document's history (phase 4). Billing and plan limits follow in phase 5.
 
 ## Stack
 
@@ -32,6 +33,13 @@ npm run dev
 
 Google sign-in is disabled until `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` are set
 (redirect URI: `http://localhost:3000/api/auth/callback/google`).
+
+Sending email is disabled until `RESEND_API_KEY` is set; the send dialog then only marks
+documents as sent. `EMAIL_FROM` defaults to Resend's sandbox sender, which **only delivers to
+the address of your own Resend account** — verify a domain before emailing real clients. To
+exercise the flow without a key, set `EMAIL_TRANSPORT=capture`: emails are logged in
+`EmailLog` and never leave the machine (the test runners set this themselves, and sending to
+`fail@capture.test` simulates a provider failure).
 
 PDFs are printed by headless Chromium (`playwright-core`). Locally, `npx playwright install chromium`
 provides it. The production image needs it too: `npx playwright install --with-deps chromium`.
@@ -79,6 +87,7 @@ src/
     auth/              session helpers, password hashing, rate limiting
     services/          business rules and validation
     invoices/          snapshots, document rendering, public tokens
+    email/             transport (Resend or capture), message template, base URL
     pdf/               Chromium renderer and embedded fonts
     repositories/      Prisma queries, always scoped to a business
     entitlements/      plan limits (single source of truth)
@@ -101,6 +110,10 @@ src/
 - **Estimates:** their own `EST-` sequence; only drafts are editable; `EXPIRED` is derived when
   reading; a reply is recorded once (by the client on the link, or by you) and conversion to an
   invoice happens only from `ACCEPTED`, under a row lock.
+- **Email:** the send transition commits first, then the PDF and the provider call run outside
+  any transaction. A provider failure is therefore an outcome, not an error: the document stays
+  sent, the attempt is stored in `EmailLog`, and the history shows both lines. One user action
+  is one history line — a first send reads "Emailed to …", a re-send adds its own entry.
 
 ### API
 
@@ -119,6 +132,7 @@ Responses follow `{ "data": … }`, `{ "data": [], "pagination": { page, limit, 
 | `GET` `POST` | `/api/v1/invoices` | `?status=draft\|sent\|overdue\|paid\|cancelled&q&sort=number\|dueDate\|issueDate\|total&order`; `POST` creates a numbered draft |
 | `GET` `PATCH` `DELETE` | `/api/v1/invoices/:id` | `PATCH` autosaves drafts (replaces all lines); `DELETE` drafts only |
 | `POST` | `/api/v1/invoices/:id/send` | Mark as sent: validates, freezes snapshots, publishes the link |
+| `POST` | `/api/v1/invoices/:id/email` | `{ to[], subject?, message?, attachPdf?, sendCopy? }`; sends a draft first. Answers 200 with `data.email.status` — the document is sent even when the provider refuses |
 | `POST` | `/api/v1/invoices/:id/duplicate` · `/cancel` · `/mark-paid` | |
 | `POST` `DELETE` | `/api/v1/invoices/:id/public-link` | New link / revoke |
 | `GET` `POST` | `/api/v1/invoices/:id/pdf` | `?download=1` for an attachment |
@@ -129,6 +143,7 @@ Responses follow `{ "data": … }`, `{ "data": [], "pagination": { page, limit, 
 | `GET` `POST` | `/api/v1/estimates` | `?status=draft\|sent\|accepted\|declined\|expired\|converted&q&sort=number\|expiryDate\|issueDate\|total` |
 | `GET` `PATCH` `DELETE` | `/api/v1/estimates/:id` | `PATCH` and `DELETE` for drafts only |
 | `POST` | `/api/v1/estimates/:id/send` · `/accept` · `/decline` · `/reopen` · `/duplicate` | `accept`/`decline` record a reply you received |
+| `POST` | `/api/v1/estimates/:id/email` | Same body as the invoice route; refused once expired or converted |
 | `POST` | `/api/v1/estimates/:id/convert` | `{ issueDate, dueDate, send? }` → `{ invoice, estimate }` |
 | `POST` `DELETE` | `/api/v1/estimates/:id/public-link` · `GET` `POST` `/pdf` | |
 | `GET` | `/api/v1/estimates/summary` | Awaiting reply, accepted-not-invoiced, win rate, reply time |

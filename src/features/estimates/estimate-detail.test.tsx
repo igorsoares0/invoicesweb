@@ -40,6 +40,7 @@ const base: EstimateDto = {
   convertedAt: null,
   respondedBy: null,
   convertedInvoice: null,
+  emails: [],
   items: [],
   events: [{ id: "e1", type: "SENT", metadata: null, createdAt: "2026-09-08T11:05:00.000Z" }],
   issues: [],
@@ -66,7 +67,7 @@ const view = buildDocumentView({
   color: "#1e40af",
 });
 
-function renderDetail(estimate: Partial<EstimateDto>, today = "2026-09-12") {
+function renderDetail(estimate: Partial<EstimateDto>, today = "2026-09-12", emailEnabled = true) {
   render(
     <EstimateDetail
       estimate={{ ...base, ...estimate }}
@@ -76,6 +77,8 @@ function renderDetail(estimate: Partial<EstimateDto>, today = "2026-09-12") {
       nextInvoiceNumber="INV-0045"
       paymentTermsDays={14}
       openConvert={false}
+      businessName="Alvorada Studio"
+      emailEnabled={emailEnabled}
     />,
   );
   return userEvent.setup();
@@ -122,5 +125,37 @@ describe("EstimateDetail", () => {
     renderDetail({ status: "CONVERTED", displayStatus: "CONVERTED", convertedInvoice: { id: "inv9", number: "INV-0045" } });
     expect(screen.getByText("Converted to INV-0045")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open invoice" })).toHaveAttribute("href", "/invoices/inv9");
+  });
+
+  it("emails the estimate again from the actions menu", async () => {
+    api.post.mockResolvedValue({ email: { status: "SENT", error: null }, estimate: base });
+    const user = renderDetail({});
+
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Email estimate" }));
+    await user.click(screen.getByTestId("send-email"));
+
+    expect(api.post).toHaveBeenCalledWith(
+      "/estimates/est1/email",
+      expect.objectContaining({ to: ["billing@pineco.com"], attachPdf: true }),
+    );
+  });
+
+  it("hides the email action when email isn't configured or the estimate expired", async () => {
+    const user = renderDetail({}, "2026-09-12", false);
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    expect(screen.queryByRole("menuitem", { name: "Email estimate" })).not.toBeInTheDocument();
+  });
+
+  it("shows email activity in the status timeline", () => {
+    renderDetail({
+      events: [
+        { id: "e2", type: "EMAIL_FAILED", metadata: { reason: "the address was rejected" }, createdAt: "2026-09-08T17:05:00.000Z" },
+        { id: "e1", type: "SENT", metadata: { channel: "email", to: ["billing@pineco.com"] }, createdAt: "2026-09-08T17:02:00.000Z" },
+      ],
+    });
+
+    expect(screen.getByText("Emailed to billing@pineco.com")).toBeInTheDocument();
+    expect(screen.getByText("Email failed — the address was rejected")).toBeInTheDocument();
   });
 });

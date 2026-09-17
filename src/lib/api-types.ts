@@ -117,7 +117,27 @@ export type InvoiceEventType =
   | "PAYMENT_REMOVED"
   | "CANCELLED"
   | "LINK_REVOKED"
-  | "DUPLICATED";
+  | "DUPLICATED"
+  | "EMAIL_SENT"
+  | "EMAIL_FAILED";
+
+export type EmailType = "INVOICE" | "ESTIMATE" | "REMINDER";
+/** QUEUED means the row exists but the provider hasn't answered yet. */
+export type EmailStatus = "QUEUED" | "SENT" | "FAILED";
+
+export interface EmailLogDto {
+  id: string;
+  type: EmailType;
+  status: EmailStatus;
+  recipients: string[];
+  subject: string;
+  attachedPdf: boolean;
+  copyToSelf: boolean;
+  /** Why it failed, in words meant for the user. */
+  error: string | null;
+  sentAt: string | null;
+  createdAt: string;
+}
 
 export interface InvoiceItemDto {
   id: string;
@@ -207,6 +227,8 @@ export interface InvoiceDto extends Omit<InvoiceListItemDto, "client" | "summary
   issues: InvoiceIssueDto[];
   /** The estimate this invoice was converted from. */
   fromEstimate: { id: string; number: string } | null;
+  /** Emails sent for this invoice, newest first. Empty on the public payload. */
+  emails: EmailLogDto[];
   updatedAt: string;
 }
 
@@ -258,6 +280,8 @@ export interface EstimateDto extends Omit<EstimateListItemDto, "client" | "summa
   items: InvoiceItemDto[];
   events: InvoiceEventDto[];
   issues: InvoiceIssueDto[];
+  /** Emails sent for this estimate, newest first. Empty on the public payload. */
+  emails: EmailLogDto[];
   updatedAt: string;
 }
 

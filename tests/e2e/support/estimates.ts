@@ -1,8 +1,8 @@
 import { expect, type Page } from "@playwright/test";
 import { pickClient, waitForSaved } from "./invoices";
 
-/** A one-line estimate, sent, ending on its detail page. Returns its number and public path. */
-export async function sentEstimate(page: Page, client: string, description = "Brand sprint", price = "4260") {
+/** A one-line estimate draft, saved and ready to send. Returns its number. */
+export async function estimateDraft(page: Page, client: string, description = "Brand sprint", price = "4260") {
   await page.goto("/estimates");
   await page.getByRole("button", { name: "New estimate" }).first().click();
   await expect(page).toHaveURL(/\/estimates\/[\w-]+$/);
@@ -17,8 +17,14 @@ export async function sentEstimate(page: Page, client: string, description = "Br
   await page.getByLabel("Scope & terms").fill("50% due on kickoff, balance on delivery.");
   await waitForSaved(page);
 
-  await page.getByRole("button", { name: "Send estimate" }).click();
-  await page.getByRole("button", { name: "Mark as sent" }).click();
+  return number;
+}
+
+/** A one-line estimate, sent, ending on its detail page. Returns its number and public path. */
+export async function sentEstimate(page: Page, client: string, description = "Brand sprint", price = "4260") {
+  const number = await estimateDraft(page, client, description, price);
+  await page.getByTestId("send-trigger").filter({ visible: true }).click();
+  await page.getByTestId("mark-as-sent").click();
   await expect(page.getByTestId("public-link")).toBeVisible();
   const publicPath = (await page.getByTestId("public-link").getAttribute("href"))!;
   return { number, publicPath };

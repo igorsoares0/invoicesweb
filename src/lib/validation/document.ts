@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isValidIsoDate } from "@/lib/dates";
-import { currencyCode, moneyAmount, optionalText, percentage } from "./common";
+import { MAX_EMAIL_MESSAGE, MAX_EMAIL_RECIPIENTS, MAX_EMAIL_SUBJECT } from "@/lib/documents/email-text";
+import { currencyCode, email, moneyAmount, optionalText, percentage } from "./common";
 
 /** Shared by invoices and estimates: lines, templates and the draft fields both documents have. */
 
@@ -63,3 +64,28 @@ export function checkUniqueLineIds(document: { items?: { id: string }[] }, ctx: 
 }
 
 export type DocumentItemInput = z.infer<typeof documentItemSchema>;
+
+/**
+ * Sending a document by email. `subject` and `message` are optional so every caller — the
+ * dialog, an API client, a future reminder — gets the same default text from one place.
+ */
+export const sendDocumentEmailSchema = z.object({
+  to: z
+    .array(email)
+    .min(1, "Add at least one recipient")
+    .max(MAX_EMAIL_RECIPIENTS, `Use at most ${MAX_EMAIL_RECIPIENTS} recipients`)
+    // Two chips for the same address would email the client twice.
+    .refine((values) => new Set(values).size === values.length, "That address is already on the list"),
+  subject: z.string().trim().min(1, "Write a subject").max(MAX_EMAIL_SUBJECT, `Use at most ${MAX_EMAIL_SUBJECT} characters`).optional(),
+  message: z
+    .string()
+    .trim()
+    .min(1, "Write a message")
+    .max(MAX_EMAIL_MESSAGE, `Use at most ${MAX_EMAIL_MESSAGE} characters`)
+    .optional(),
+  attachPdf: z.boolean().default(true),
+  /** Blind-copy the account address, so the sender keeps a record. */
+  sendCopy: z.boolean().default(true),
+});
+
+export type SendDocumentEmailInput = z.infer<typeof sendDocumentEmailSchema>;

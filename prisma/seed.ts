@@ -110,6 +110,8 @@ async function main() {
     currency?: string;
     lines: SeedLine[];
     sent?: boolean;
+    /** How it was sent: by email (the default for sent invoices) or shared by hand. */
+    emailed?: boolean;
     viewed?: number;
     payments?: { amount: string; on: number; method: "BANK_TRANSFER" | "CARD"; reference?: string }[];
   }) {
@@ -127,7 +129,14 @@ async function main() {
             ? "VIEWED"
             : "SENT";
     const events: Prisma.InvoiceEventCreateWithoutInvoiceInput[] = [{ type: "CREATED", createdAt: at(options.issued, 9) }];
-    if (options.sent) events.push({ type: "SENT", metadata: { channel: "manual" }, createdAt: at(options.issued, 17) });
+    const emailed = options.sent && options.emailed !== false && Boolean(client.email);
+    if (options.sent) {
+      events.push({
+        type: "SENT",
+        metadata: emailed ? { channel: "email", to: [client.email] } : { channel: "manual" },
+        createdAt: at(options.issued, 17),
+      });
+    }
     if (options.viewed !== undefined) events.push({ type: "VIEWED", createdAt: at(options.viewed, 8) });
     for (const payment of options.payments ?? []) {
       events.push({ type: "PAYMENT_ADDED", metadata: { amount: payment.amount, method: payment.method }, createdAt: at(payment.on, 11) });
@@ -166,6 +175,23 @@ async function main() {
           })),
         },
         events: { create: events },
+        emails: emailed
+          ? {
+              create: {
+                businessId,
+                type: "INVOICE",
+                status: "SENT",
+                recipient: client.email!,
+                recipients: [client.email!],
+                subject: `Invoice INV-${String(options.sequence).padStart(4, "0")} from ${business.name}`,
+                attachedPdf: true,
+                copyToSelf: true,
+                providerId: `seed_${options.sequence}`,
+                sentAt: at(options.issued, 17),
+                createdAt: at(options.issued, 17),
+              },
+            }
+          : undefined,
         createdAt: at(options.issued, 9),
       },
     });
@@ -173,7 +199,7 @@ async function main() {
 
   await invoice({ sequence: 39, client: "Halcyon Labs", issued: -43, due: -29, sent: true, viewed: -42, lines: [{ description: "Discovery workshop", quantity: "2", unitPrice: "1900" }], payments: [{ amount: "3800.00", on: -32, method: "BANK_TRANSFER", reference: "TRF-88120" }] });
   await invoice({ sequence: 40, client: "Mercado Vivo", issued: -27, due: 4, sent: true, viewed: -25, lines: [{ description: "Brand sprint", quantity: "1", unitPrice: "4260" }], payments: [{ amount: "2000.00", on: -19, method: "BANK_TRANSFER", reference: "TRF-99413" }] });
-  await invoice({ sequence: 41, client: "Northwind Café", issued: -23, due: -16, currency: "EUR", sent: true, lines: [{ description: "Menu system", quantity: "1", unitPrice: "1980" }] });
+  await invoice({ sequence: 41, client: "Northwind Café", issued: -23, due: -16, currency: "EUR", sent: true, emailed: false, lines: [{ description: "Menu system", quantity: "1", unitPrice: "1980" }] });
   await invoice({ sequence: 42, client: "Halcyon Labs", issued: -2, due: 12, sent: true, lines: [{ description: "Design retainer — monthly", quantity: "1", unitPrice: "5200", taxRate: "23" }] });
   await invoice({ sequence: 43, client: "Vale Coffee", issued: -9, due: -2, sent: true, viewed: -8, lines: [{ description: "Motion pass", quantity: "8", unitPrice: "160", taxRate: "23" }] });
   await invoice({
@@ -204,7 +230,14 @@ async function main() {
     const rows = lineRows(options.lines);
     const sent = options.status !== "DRAFT";
     const events: Prisma.EstimateEventCreateWithoutEstimateInput[] = [{ type: "CREATED", createdAt: at(options.issued, 9) }];
-    if (sent) events.push({ type: "SENT", metadata: { channel: "manual" }, createdAt: at(options.issued, 11) });
+    const emailed = sent && Boolean(client?.email);
+    if (sent) {
+      events.push({
+        type: "SENT",
+        metadata: emailed ? { channel: "email", to: [client!.email] } : { channel: "manual" },
+        createdAt: at(options.issued, 11),
+      });
+    }
     if (options.viewed !== undefined) events.push({ type: "VIEWED", createdAt: at(options.viewed, 18) });
     if (options.replied !== undefined) {
       const accepted = options.status === "ACCEPTED" || options.status === "CONVERTED";
@@ -244,6 +277,23 @@ async function main() {
             : undefined,
         items: { create: rows },
         events: { create: events },
+        emails: emailed
+          ? {
+              create: {
+                businessId,
+                type: "ESTIMATE",
+                status: "SENT",
+                recipient: client!.email!,
+                recipients: [client!.email!],
+                subject: `Estimate EST-${String(options.sequence).padStart(4, "0")} from ${business.name}`,
+                attachedPdf: true,
+                copyToSelf: true,
+                providerId: `seed_est_${options.sequence}`,
+                sentAt: at(options.issued, 11),
+                createdAt: at(options.issued, 11),
+              },
+            }
+          : undefined,
         createdAt: at(options.issued, 9),
       },
     });

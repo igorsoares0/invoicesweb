@@ -8,7 +8,7 @@ export async function truncateAll() {
     throw new Error("Refusing to truncate: DATABASE_URL does not point at a *_test database.");
   }
   await db.$executeRawUnsafe(
-    'TRUNCATE TABLE "EstimateEvent", "EstimateItem", "Estimate", "InvoiceEvent", "Payment", "InvoiceItem", "Invoice", "Product", "Client", "Business", "Account", "Session", "VerificationToken", "User" CASCADE',
+    'TRUNCATE TABLE "EmailLog", "EstimateEvent", "EstimateItem", "Estimate", "InvoiceEvent", "Payment", "InvoiceItem", "Invoice", "Product", "Client", "Business", "Account", "Session", "VerificationToken", "User" CASCADE',
   );
 }
 

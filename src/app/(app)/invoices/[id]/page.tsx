@@ -6,6 +6,7 @@ import { toEditable } from "@/features/documents/editor/kinds";
 import { todayIn } from "@/lib/dates";
 import { ApiError } from "@/server/api/errors";
 import { requireBusiness } from "@/server/auth/session";
+import { isEmailEnabled } from "@/server/email/transport";
 import { documentParties, invoiceViewFrom } from "@/server/documents/render";
 import { invoiceRepository } from "@/server/repositories/invoice-repository";
 import { clientService } from "@/server/services/client-service";
@@ -38,6 +39,7 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
         clients={clients.data}
         products={products.data}
         defaultTaxRate={business.defaultTaxRate}
+        emailEnabled={isEmailEnabled()}
         origin={
           invoice.fromEstimate
             ? { href: `/estimates/${invoice.fromEstimate.id}`, label: `Converted from ${invoice.fromEstimate.number}` }
@@ -57,6 +59,8 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
       view={view}
       timezone={business.timezone}
       today={todayIn(business.timezone)}
+      businessName={business.name}
+      emailEnabled={isEmailEnabled()}
     />
   );
 }

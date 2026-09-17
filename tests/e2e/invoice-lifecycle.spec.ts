@@ -14,7 +14,7 @@ test("an invoice goes from draft to paid", async ({ page, browser }) => {
   const number = (await page.getByRole("heading", { level: 1 }).innerText()).trim();
   expect(number).toMatch(/^INV-\d{4}$/);
   await expect(page.getByText(`${number} is already assigned to this draft`)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send invoice" })).toBeDisabled();
+  await expect(page.getByTestId("send-trigger").filter({ visible: true })).toBeDisabled();
 
   await pickClient(page, "Pine & Co.");
   await page.getByRole("button", { name: "Add first item" }).click();
@@ -41,7 +41,7 @@ test("an invoice goes from draft to paid", async ({ page, browser }) => {
   await expect(page.getByRole("alert", { name: "Problems to fix before sending" })).toContainText(
     "Due date is before the issue date",
   );
-  await expect(page.getByRole("button", { name: "Send invoice" })).toBeDisabled();
+  await expect(page.getByTestId("send-trigger").filter({ visible: true })).toBeDisabled();
   const issueDate = await page.getByLabel("Issue date").inputValue();
   await page.getByLabel("Due date").fill(issueDate);
   await expect(page.getByRole("alert", { name: "Problems to fix before sending" })).toBeHidden();

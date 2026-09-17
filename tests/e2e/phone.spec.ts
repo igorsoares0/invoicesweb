@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { signIn } from "./support/auth";
-import { createAccount, createClient } from "./support/db";
+import { createAccount, createClient, emailsFor } from "./support/db";
 import { sentEstimate } from "./support/estimates";
 
 test("works at phone width: tab bar, bottom sheets and card rows", async ({ page }) => {
@@ -78,6 +78,38 @@ test("a client accepts an estimate on a phone", async ({ page, browser }) => {
   await expect(page.getByText(number).filter({ visible: true })).toBeVisible();
   await page.getByRole("button", { name: "Accept estimate" }).filter({ visible: true }).click();
   await expect(page.getByRole("status").filter({ visible: true })).toContainText(/^Accepted on/);
+
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(scrollWidth).toBeLessThanOrEqual(390);
+});
+
+test("emails an invoice from a phone", async ({ page }) => {
+  const account = await createAccount({ businessName: "Alvorada Studio" });
+  await createClient(account.businessId, { name: "Ana Ruiz", email: "billing@pineco.com" });
+  await signIn(page, account.email, account.password);
+
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Invoices" }).click();
+  await page.getByRole("button", { name: "New invoice" }).first().click();
+  await expect(page).toHaveURL(/\/invoices\/[\w-]+$/);
+  const number = (await page.getByRole("heading", { level: 1 }).innerText()).trim();
+
+  await page.getByRole("combobox", { name: "Bill to" }).click();
+  await page.getByRole("option", { name: /Ana Ruiz/ }).click();
+  await page.getByRole("button", { name: "+ Add item" }).click();
+  const sheet = page.getByRole("dialog", { name: "Edit item" });
+  await sheet.getByLabel("Description").fill("Website redesign");
+  await sheet.getByLabel("Unit price").fill("2400");
+  await sheet.getByRole("button", { name: "Save item" }).click();
+  await expect(page.getByRole("status").filter({ hasText: /^Saved/ })).toBeVisible({ timeout: 20_000 });
+
+  await page.getByTestId("send-trigger").filter({ visible: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Send invoice" });
+  await expect(dialog.getByText("billing@pineco.com")).toBeVisible();
+  await dialog.getByRole("switch", { name: "Attach the PDF" }).click();
+  await dialog.getByTestId("send-email").click();
+
+  await expect(page.getByTestId("public-link")).toBeVisible();
+  expect((await emailsFor(account.businessId, number))[0].status).toBe("SENT");
 
   const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(scrollWidth).toBeLessThanOrEqual(390);

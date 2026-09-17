@@ -28,6 +28,7 @@ export type InvoiceAction =
   | "edit"
   | "delete"
   | "send"
+  | "email"
   | "recordPayment"
   | "removePayment"
   | "cancel"
@@ -38,6 +39,9 @@ const ALLOWED: Record<InvoiceAction, readonly InvoiceStatus[]> = {
   edit: ["DRAFT"],
   delete: ["DRAFT"],
   send: ["DRAFT"],
+  // Emailing a draft sends it first; later it's a re-send, which changes no status.
+  // A cancelled invoice has no live link to email.
+  email: ["DRAFT", "SENT", "VIEWED", "PARTIALLY_PAID", "PAID"],
   recordPayment: ["SENT", "VIEWED", "PARTIALLY_PAID"],
   removePayment: ["PARTIALLY_PAID", "PAID"],
   // Once money has come in, cancelling would hide it; refunds are out of scope for the MVP.

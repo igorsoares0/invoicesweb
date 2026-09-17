@@ -67,6 +67,31 @@ export async function closePool() {
   pool = undefined;
 }
 
+export interface EmailRow {
+  recipients: string[];
+  subject: string;
+  status: string;
+  attachedPdf: boolean;
+  copyToSelf: boolean;
+}
+
+/**
+ * What the app logged for a document. The E2E server runs in its own process with
+ * EMAIL_TRANSPORT=capture, so the database is the only place a spec can see an email.
+ */
+export async function emailsFor(businessId: string, number: string): Promise<EmailRow[]> {
+  const { rows } = await getPool().query<EmailRow>(
+    `SELECT e.recipients, e.subject, e.status, e."attachedPdf", e."copyToSelf"
+       FROM "EmailLog" e
+       LEFT JOIN "Invoice" i ON i.id = e."invoiceId"
+       LEFT JOIN "Estimate" s ON s.id = e."estimateId"
+      WHERE e."businessId" = $1 AND COALESCE(i.number, s.number) = $2
+      ORDER BY e."createdAt" ASC`,
+    [businessId, number],
+  );
+  return rows;
+}
+
 /** Moves an estimate's expiry date into the past, to exercise the expired states. */
 export async function expireEstimate(number: string, businessId: string) {
   await getPool().query(`UPDATE "Estimate" SET "expiryDate" = '2020-01-01' WHERE number = $1 AND "businessId" = $2`, [

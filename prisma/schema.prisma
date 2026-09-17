@@ -108,6 +108,7 @@ model Business {
   products  Product[]
   invoices  Invoice[]
   estimates Estimate[]
+  emails    EmailLog[]
 }
 
 model Client {
@@ -207,6 +208,8 @@ enum InvoiceEventType {
   CANCELLED
   LINK_REVOKED
   DUPLICATED
+  EMAIL_SENT
+  EMAIL_FAILED
 }
 
 model Invoice {
@@ -251,6 +254,7 @@ model Invoice {
   items        InvoiceItem[]
   payments     Payment[]
   events       InvoiceEvent[]
+  emails       EmailLog[]
   /// The estimate this invoice was converted from, if any.
   fromEstimate Estimate?      @relation("EstimateConversion")
 
@@ -342,6 +346,8 @@ enum EstimateEventType {
   CONVERTED
   LINK_REVOKED
   DUPLICATED
+  EMAIL_SENT
+  EMAIL_FAILED
 }
 
 model Estimate {
@@ -387,6 +393,7 @@ model Estimate {
   client   Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
   items    EstimateItem[]
   events   EstimateEvent[]
+  emails   EmailLog[]
 
   @@unique([businessId, sequence])
   @@index([businessId, status])
@@ -429,5 +436,52 @@ model EstimateEvent {
 
   estimate Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
 
+  @@index([estimateId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Email (spec §13, §40)
+// ---------------------------------------------------------------------------
+
+enum EmailType {
+  INVOICE
+  ESTIMATE
+  REMINDER
+}
+
+/// QUEUED only exists between creating the row and hearing back from the provider.
+/// Delivery states (DELIVERED, OPENED) wait for provider webhooks.
+enum EmailStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+model EmailLog {
+  id          String      @id @default(cuid())
+  businessId  String
+  invoiceId   String?
+  estimateId  String?
+  type        EmailType
+  status      EmailStatus @default(QUEUED)
+  /// First recipient, so a log line reads on its own; `recipients` holds them all.
+  recipient   String
+  recipients  String[]
+  subject     String
+  /// Whether the PDF rode along, and whether a copy went to the sender.
+  attachedPdf Boolean     @default(false)
+  copyToSelf  Boolean     @default(false)
+  /// The provider's message id, once it accepted the email.
+  providerId  String?
+  error       String?
+  sentAt      DateTime?
+  createdAt   DateTime    @default(now())
+
+  business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  invoice  Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  estimate Estimate? @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
+  @@index([invoiceId, createdAt])
   @@index([estimateId, createdAt])
 }

@@ -42,7 +42,8 @@ export default defineConfig({
     url: `http://localhost:${PORT}/sign-in`,
     timeout: 600_000,
     reuseExistingServer: false,
-    env: { DATABASE_URL: databaseUrl },
+    // EMAIL_TRANSPORT is explicit: the built server inherits `.env`, and a real key must never send.
+    env: { DATABASE_URL: databaseUrl, EMAIL_TRANSPORT: "capture" },
     stdout: "ignore",
     stderr: "pipe",
   },

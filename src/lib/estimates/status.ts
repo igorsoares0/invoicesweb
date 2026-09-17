@@ -28,6 +28,7 @@ export type EstimateAction =
   | "edit"
   | "delete"
   | "send"
+  | "email"
   | "accept"
   | "decline"
   | "reopen"
@@ -48,6 +49,9 @@ export function canPerformEstimate(
     case "delete":
     case "send":
       return status === "DRAFT";
+    case "email":
+      // Converted estimates live on as an invoice, and an expired one can no longer be answered.
+      return status !== "CONVERTED" && !(isAwaitingReply(status) && expired);
     case "accept":
     case "decline":
       return isAwaitingReply(status) && !expired;

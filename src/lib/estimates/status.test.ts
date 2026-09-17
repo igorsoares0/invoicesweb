@@ -48,4 +48,15 @@ describe("canPerformEstimate", () => {
     expect(canPerformEstimate({ ...sent, status: "DECLINED" }, "reopen", "2026-10-01")).toBe(false);
     expect(canPerformEstimate(sent, "reopen", today)).toBe(false);
   });
+
+  it("allows email until the estimate expires or becomes an invoice", () => {
+    for (const status of ["DRAFT", "SENT", "VIEWED", "ACCEPTED", "DECLINED"] as const) {
+      expect(canPerformEstimate({ ...sent, status }, "email", today)).toBe(true);
+    }
+    // Awaiting a reply past the expiry date: the client has nothing left to answer.
+    expect(canPerformEstimate(sent, "email", "2026-10-01")).toBe(false);
+    // Accepted stays emailable even after the expiry date — the answer is already in.
+    expect(canPerformEstimate({ ...sent, status: "ACCEPTED" }, "email", "2026-10-01")).toBe(true);
+    expect(canPerformEstimate({ ...sent, status: "CONVERTED", convertedInvoiceId: "inv1" }, "email", today)).toBe(false);
+  });
 });
