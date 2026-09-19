@@ -31,6 +31,14 @@ export function webhookSecret(): string | null {
   return env("PADDLE_WEBHOOK_SECRET");
 }
 
+/**
+ * Where Paddle's own payment links should land (`?_ptxn=`). Must be on a domain approved in the
+ * Paddle account, so localhost never works: leave it unset in development to use the default.
+ */
+export function paddleCheckoutUrl(): string | null {
+  return env("PADDLE_CHECKOUT_URL");
+}
+
 export function paddleEnvironment(): "sandbox" | "production" {
   return env("PADDLE_ENV") === "production" ? "production" : "sandbox";
 }

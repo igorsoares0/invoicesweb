@@ -8,6 +8,7 @@ export const TEST_BILLING_ENV = {
   PADDLE_ENV: "sandbox",
   PADDLE_API_KEY: "",
   PADDLE_CLIENT_TOKEN: "",
+  PADDLE_CHECKOUT_URL: "",
   PADDLE_WEBHOOK_SECRET: TEST_WEBHOOK_SECRET,
   PADDLE_PRICE_PRO_MONTHLY: "pri_test_pro_monthly",
   PADDLE_PRICE_PRO_YEARLY: "pri_test_pro_yearly",

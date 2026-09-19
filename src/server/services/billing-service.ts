@@ -7,7 +7,7 @@ import { checkoutSchema, syncCheckoutSchema } from "@/lib/validation/billing";
 import { toFieldErrors } from "@/lib/validation/errors";
 import { ApiError, ErrorCode } from "@/server/api/errors";
 import type { BusinessContext } from "@/server/auth/types";
-import { paddleClient, proPrices, webhookSecret } from "@/server/billing/paddle";
+import { paddleCheckoutUrl, paddleClient, proPrices, webhookSecret } from "@/server/billing/paddle";
 import { verifyPaddleSignature } from "@/server/billing/signature";
 import { subscriptionState, type SubscriptionState } from "@/server/billing/subscription-state";
 import { db } from "@/server/db";
@@ -22,6 +22,20 @@ import { isPrismaError } from "@/server/repositories/prisma-errors";
 export const TRIAL_DAYS = 14;
 
 type Client = Tx | typeof db;
+
+/**
+ * Runs a Paddle API call. Paddle's own wording (domains, permissions) goes to the logs; the user
+ * gets a plain sentence and a 502, since it's the provider that refused.
+ */
+async function paddleCall<T>(what: string, call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    const detail = error && typeof error === "object" ? { ...(error as object), message: (error as Error).message } : error;
+    console.error(`Paddle couldn't ${what}`, { detail });
+    throw new ApiError(ErrorCode.PAYMENT_ERROR, `Paddle couldn't ${what}. Try again in a moment.`);
+  }
+}
 
 /** Subscriptions that are still billing: a second checkout would charge twice. */
 const LIVE: readonly string[] = ["ACTIVE", "TRIALING", "PAST_DUE"];
@@ -189,11 +203,7 @@ export const billingService = {
    * created here either: the overlay finds or creates it from the email, which avoids clashing with
    * other products' customers in a shared account.
    */
-  async checkout(
-    context: BusinessContext,
-    input: unknown,
-    origin: string,
-  ): Promise<{ transactionId: string; customerEmail: string }> {
+  async checkout(context: BusinessContext, input: unknown): Promise<{ transactionId: string; customerEmail: string }> {
     const parsed = checkoutSchema.safeParse(input);
     if (!parsed.success) throw ApiError.validation(toFieldErrors(parsed.error));
     const paddle = await this.requirePaddle();
@@ -205,13 +215,18 @@ export const billingService = {
     const customerId = subscriptions.find((subscription) => subscription.providerCustomerId)?.providerCustomerId;
     const user = await db.user.findUniqueOrThrow({ where: { id: context.userId }, select: { email: true } });
 
-    const transaction = await paddle.transactions.create({
-      items: [{ priceId: proPrices()[parsed.data.interval]!, quantity: 1 }],
-      customData: { userId: context.userId },
-      ...(customerId ? { customerId } : {}),
-      // Our own page, not the account's default payment link, which other products share.
-      checkout: { url: `${origin}/pricing` },
-    });
+    // The overlay opens on our page either way. The URL only matters for Paddle's own payment
+    // links (emails, `?_ptxn=`), and Paddle accepts it only on an approved domain — never
+    // localhost — so it's configured per environment and left to the account default otherwise.
+    const checkoutUrl = paddleCheckoutUrl();
+    const transaction = await paddleCall("start the checkout", () =>
+      paddle.transactions.create({
+        items: [{ priceId: proPrices()[parsed.data.interval]!, quantity: 1 }],
+        customData: { userId: context.userId },
+        ...(customerId ? { customerId } : {}),
+        ...(checkoutUrl ? { checkout: { url: checkoutUrl } } : {}),
+      }),
+    );
     return { transactionId: transaction.id, customerEmail: user.email };
   },
 
@@ -224,11 +239,12 @@ export const billingService = {
     if (!parsed.success) throw ApiError.validation(toFieldErrors(parsed.error));
     const paddle = await this.requirePaddle();
 
-    const transaction = await paddle.transactions.get(parsed.data.transactionId);
+    const transaction = await paddleCall("look up the checkout", () => paddle.transactions.get(parsed.data.transactionId));
     // Someone else's checkout reads as missing, never as someone else's data.
     if (transaction.customData?.userId !== context.userId) throw ApiError.notFound("Checkout");
     if (transaction.subscriptionId) {
-      const subscription = await paddle.subscriptions.get(transaction.subscriptionId);
+      const subscriptionId = transaction.subscriptionId;
+      const subscription = await paddleCall("look up the subscription", () => paddle.subscriptions.get(subscriptionId));
       const state = subscriptionState(subscription);
       if (state) {
         await db.$transaction((tx) =>
@@ -251,9 +267,11 @@ export const billingService = {
     if (!customerId) throw ApiError.conflict("There's no subscription to manage yet.");
 
     const live = subscriptions.filter((subscription) => subscription.status !== "CANCELED" && subscription.providerSubscriptionId);
-    const session = await paddle.customerPortalSessions.create(
-      customerId,
-      live.map((subscription) => subscription.providerSubscriptionId!),
+    const session = await paddleCall("open the billing portal", () =>
+      paddle.customerPortalSessions.create(
+        customerId,
+        live.map((subscription) => subscription.providerSubscriptionId!),
+      ),
     );
     const current = session.urls.subscriptions[0];
     return {

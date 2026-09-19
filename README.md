@@ -48,7 +48,8 @@ are set; plan limits apply either way. To try a real checkout in the Paddle sand
 
 1. Create an API key and a client-side token in the Paddle dashboard and put them in `.env`. The
    account needs a default payment link (any approved URL) before it can create transactions.
-2. `npm run dev`, then `ngrok http 3000`, and add a notification destination for
+   Leave `PADDLE_CHECKOUT_URL` empty locally: Paddle only accepts approved domains, never localhost.
+2. `npm run dev`, then `ngrok http 3000` (ngrok hosts are allowed as dev origins in `next.config.ts`), and add a notification destination for
    `https://<ngrok-host>/api/webhooks/paddle` with the `subscription.*` events. Put its secret in
    `PADDLE_WEBHOOK_SECRET`. (Without the webhook, the page still activates Pro by syncing the
    checkout; the webhook keeps cancellations and renewals in step.)

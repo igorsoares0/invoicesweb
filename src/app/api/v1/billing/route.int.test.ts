@@ -46,23 +46,44 @@ describe("GET /api/v1/billing", () => {
 });
 
 describe("POST /api/v1/billing/checkout", () => {
-  it("creates the transaction on the server, tied to the account and to our own page", async () => {
+  it("creates the transaction on the server, tied to the account", async () => {
     const { user } = await signedIn();
 
-    const { status, json } = await callRoute(checkout, {
-      method: "POST",
-      path: "/api/v1/billing/checkout",
-      body: { interval: "YEAR" },
-      headers: { "x-forwarded-host": "app.example.com", "x-forwarded-proto": "https" },
-    });
+    const { status, json } = await callRoute(checkout, { method: "POST", body: { interval: "YEAR" } });
 
     expect(status).toBe(200);
     expect(json.data).toEqual({ transactionId: TXN, customerEmail: user.email });
+    // No checkout URL configured: Paddle falls back to the account's default payment link.
     expect(paddle.transactions.create).toHaveBeenCalledWith({
       items: [{ priceId: TEST_BILLING_ENV.PADDLE_PRICE_PRO_YEARLY, quantity: 1 }],
       customData: { userId: user.id },
-      checkout: { url: "https://app.example.com/pricing" },
     });
+  });
+
+  it("points Paddle's payment links at the configured page, on an approved domain", async () => {
+    await signedIn();
+    process.env.PADDLE_CHECKOUT_URL = "https://app.example.com/pricing";
+    try {
+      await callRoute(checkout, { method: "POST", body: { interval: "MONTH" } });
+    } finally {
+      process.env.PADDLE_CHECKOUT_URL = "";
+    }
+    expect(paddle.transactions.create.mock.calls[0][0]).toMatchObject({ checkout: { url: "https://app.example.com/pricing" } });
+  });
+
+  it("turns a Paddle refusal into a plain message instead of a 500", async () => {
+    await signedIn();
+    paddle.transactions.create.mockRejectedValue(
+      Object.assign(new Error("not approved"), { code: "transaction_checkout_url_domain_is_not_approved" }),
+    );
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const { status, json } = await callRoute(checkout, { method: "POST", body: { interval: "MONTH" } });
+
+    expect(status).toBe(402);
+    expect(json.error).toMatchObject({ code: "PAYMENT_ERROR", message: "Paddle couldn't start the checkout. Try again in a moment." });
+    expect(log).toHaveBeenCalled();
+    log.mockRestore();
   });
 
   it("reuses the Paddle customer of an earlier subscription", async () => {
