@@ -8,6 +8,8 @@ import { useState } from "react";
 import { LogoMark } from "@/components/brand/logo";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { signOutAction } from "@/features/auth/actions";
+import { usePlan } from "@/features/billing/plan-context";
+import { planLabel, UsageCard } from "@/features/billing/usage-card";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { isActive, MORE_ICON, MORE_NAV, PHONE_TABS, PRIMARY_NAV, SECONDARY_NAV, type NavCounts, type NavItem } from "./nav-items";
 
@@ -52,13 +54,14 @@ export function Sidebar({
   counts: NavCounts;
 }) {
   const pathname = usePathname();
+  const plan = usePlan();
   return (
     <aside className="sticky top-0 hidden h-dvh w-[60px] shrink-0 flex-col border-r bg-card px-2 py-4 sm:flex lg:w-[230px] lg:px-3">
       <div className="mb-4 flex items-center gap-2.5 px-1 max-lg:justify-center" data-testid="business-chip">
         <LogoMark letter={businessName} />
         <div className="min-w-0 max-lg:sr-only">
           <p className="truncate text-[13px] font-semibold">{businessName}</p>
-          <p className="text-[11px] text-muted-2">Free plan</p>
+          <p className="text-[11px] text-muted-2">{plan ? planLabel(plan.plan) : "Free plan"}</p>
         </div>
       </div>
       <nav aria-label="Main" className="flex flex-col gap-0.5">
@@ -70,17 +73,24 @@ export function Sidebar({
           <NavLink key={item.href} item={item} pathname={pathname} />
         ))}
       </nav>
-      <div className="mt-auto border-t pt-3">
-        <p className="truncate px-2.5 pb-1 text-[12px] text-muted-2 max-lg:sr-only">{userEmail}</p>
-        <form action={signOutAction}>
-          <button
-            type="submit"
-            className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium text-ink-2 hover:bg-divider max-lg:justify-center max-lg:px-0"
-          >
-            <LogOutIcon className="size-4 text-line-strong" strokeWidth={1.6} />
-            <span className="max-lg:sr-only">Sign out</span>
-          </button>
-        </form>
+      <div className="mt-auto flex flex-col gap-3">
+        {plan ? (
+          <div className="max-lg:hidden">
+            <UsageCard plan={plan.plan} />
+          </div>
+        ) : null}
+        <div className="border-t pt-3">
+          <p className="truncate px-2.5 pb-1 text-[12px] text-muted-2 max-lg:sr-only">{userEmail}</p>
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium text-ink-2 hover:bg-divider max-lg:justify-center max-lg:px-0"
+            >
+              <LogOutIcon className="size-4 text-line-strong" strokeWidth={1.6} />
+              <span className="max-lg:sr-only">Sign out</span>
+            </button>
+          </form>
+        </div>
       </div>
     </aside>
   );
@@ -98,6 +108,7 @@ function isFocusedDocument(pathname: string) {
 /** Phone navigation (≤640px): a fixed bottom tab bar, with a sheet for the rest. */
 export function BottomTabs() {
   const pathname = usePathname();
+  const plan = usePlan();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreActive = MORE_NAV.some((item) => isActive(pathname, item.href));
   const tabClass = (active: boolean) =>
@@ -132,6 +143,12 @@ export function BottomTabs() {
             <SheetTitle>More</SheetTitle>
             <SheetDescription className="sr-only">Other sections</SheetDescription>
           </SheetHeader>
+          {plan ? (
+            <div className="px-4">
+              <p className="mb-2 text-[12px] font-medium text-muted-2">{planLabel(plan.plan)}</p>
+              <UsageCard plan={plan.plan} />
+            </div>
+          ) : null}
           <nav aria-label="More" className="flex flex-col px-2">
             {MORE_NAV.map((item) => {
               const Icon = item.icon;

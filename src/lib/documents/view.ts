@@ -51,6 +51,8 @@ export interface DocumentViewInput {
   notes: string | null;
   terms: string | null;
   color: string;
+  /** Prints "Made with Invoice Maker" (documents from the Free plan). */
+  branded?: boolean;
 }
 
 export interface DocumentParty {
@@ -147,6 +149,7 @@ export interface DocumentView {
   notes: string | null;
   terms: string | null;
   accent: string;
+  branded: boolean;
 }
 
 function party(input: PartyInput): DocumentParty {
@@ -231,6 +234,7 @@ export function buildDocumentView(input: DocumentViewInput): DocumentView {
     notes: input.notes,
     terms: input.terms,
     accent: input.color,
+    branded: input.branded ?? false,
   };
 }
 

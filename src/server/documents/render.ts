@@ -8,11 +8,21 @@ import { PrintedDocument } from "@/features/documents/document-templates";
 import { db } from "@/server/db";
 import { embeddedFontCss } from "@/server/pdf/fonts";
 import { renderPdf } from "@/server/pdf/pdf-renderer";
+import { billingService } from "@/server/services/billing-service";
 import { billToSnapshot, issuerSnapshot, type BillToSnapshot, type IssuerSnapshot } from "./snapshots";
 
+export interface DocumentParties {
+  issuer: PartyInput;
+  billTo: PartyInput | null;
+  /** Whether it prints "Made with Invoice Maker". */
+  branded: boolean;
+}
+
 /**
- * Who the document is from and to. Sent invoices print the snapshot taken when they were sent;
- * drafts show the business and client as they are now.
+ * Who the document is from and to, and whether it carries the "Made with" mark. Sent documents
+ * print the snapshot taken when they were sent; drafts show the business and client as they are
+ * now. The mark follows the plan at send time, except that an owner who is on Pro today never
+ * shows it — upgrading cleans up links already sent, downgrading never brands them after the fact.
  */
 export async function documentParties(invoice: {
   status: string;
@@ -20,21 +30,26 @@ export async function documentParties(invoice: {
   billToSnapshot: unknown;
   clientId: string | null;
   businessId: string;
-}): Promise<{ issuer: PartyInput; billTo: PartyInput | null }> {
+}): Promise<DocumentParties> {
+  const business = (await db.business.findUniqueOrThrow({ where: { id: invoice.businessId } })) as Business;
+  const plan = await billingService.planFor(business.userId);
+  const onPro = plan.plan === "PRO";
+
   if (invoice.status !== "DRAFT" && invoice.issuerSnapshot) {
+    const snapshot = invoice.issuerSnapshot as unknown as IssuerSnapshot;
     return {
-      issuer: invoice.issuerSnapshot as unknown as IssuerSnapshot,
+      issuer: snapshot,
       billTo: (invoice.billToSnapshot as unknown as BillToSnapshot | null) ?? null,
+      branded: Boolean(snapshot.branded) && !onPro,
     };
   }
-  const [business, client] = await Promise.all([
-    db.business.findUniqueOrThrow({ where: { id: invoice.businessId } }) as Promise<Business>,
-    invoice.clientId ? (db.client.findUnique({ where: { id: invoice.clientId } }) as Promise<Client | null>) : null,
-  ]);
-  return { issuer: issuerSnapshot(business), billTo: client ? billToSnapshot(client) : null };
+  const client = invoice.clientId
+    ? ((await db.client.findUnique({ where: { id: invoice.clientId } })) as Client | null)
+    : null;
+  return { issuer: issuerSnapshot(business), billTo: client ? billToSnapshot(client) : null, branded: !onPro };
 }
 
-export function invoiceViewFrom(dto: InvoiceDto, parties: { issuer: PartyInput; billTo: PartyInput | null }): DocumentView {
+export function invoiceViewFrom(dto: InvoiceDto, parties: DocumentParties): DocumentView {
   return buildDocumentView({
     number: dto.number,
     currency: dto.currency,
@@ -52,10 +67,11 @@ export function invoiceViewFrom(dto: InvoiceDto, parties: { issuer: PartyInput; 
     notes: dto.notes,
     terms: dto.terms,
     color: dto.color,
+    branded: parties.branded,
   });
 }
 
-export function estimateViewFrom(dto: EstimateDto, parties: { issuer: PartyInput; billTo: PartyInput | null }): DocumentView {
+export function estimateViewFrom(dto: EstimateDto, parties: DocumentParties): DocumentView {
   return buildDocumentView({
     kind: "estimate",
     number: dto.number,
@@ -74,6 +90,7 @@ export function estimateViewFrom(dto: EstimateDto, parties: { issuer: PartyInput
     notes: dto.notes,
     terms: dto.terms,
     color: dto.color,
+    branded: parties.branded,
   });
 }
 

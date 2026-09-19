@@ -5,10 +5,11 @@ describe("getEntitlements", () => {
   it("limits the free plan", () => {
     expect(getEntitlements("FREE")).toEqual({
       plan: "FREE",
-      limits: { invoicesPerMonth: 5, openEstimates: 3 },
+      limits: { invoicesPerMonth: 3 },
       features: {
         templates: ["MODERN", "CLASSIC"],
         canUseCustomBranding: false,
+        hasBrandingMark: true,
         canSendReminders: false,
         canExportCsv: false,
       },
@@ -17,9 +18,10 @@ describe("getEntitlements", () => {
 
   it("unlocks everything on pro", () => {
     const pro = getEntitlements("PRO");
-    expect(pro.limits).toEqual({ invoicesPerMonth: null, openEstimates: null });
+    expect(pro.limits).toEqual({ invoicesPerMonth: null });
     expect(pro.features.templates).toHaveLength(5);
     expect(pro.features.canUseCustomBranding).toBe(true);
+    expect(pro.features.hasBrandingMark).toBe(false);
   });
 
   it("returns copies so callers can't mutate the plan table", () => {

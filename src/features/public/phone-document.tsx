@@ -94,6 +94,7 @@ export function PhoneDocument({ view, hero, actions }: { view: DocumentView; her
         {view.issuer.address ? <p>{view.issuer.address}</p> : null}
         <p>{[view.issuer.email, view.issuer.taxId ? `VAT ${view.issuer.taxId}` : null].filter(Boolean).join(" · ")}</p>
       </section>
+      {view.branded ? <p className="text-center text-[12px] text-muted-2">Made with Invoice Maker</p> : null}
       <div className="fixed inset-x-0 bottom-0 grid grid-cols-2 gap-3 border-t bg-card px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
         {actions}
       </div>

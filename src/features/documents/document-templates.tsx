@@ -501,6 +501,7 @@ export function PrintedDocument({ view, template }: { view: DocumentView; templa
       aria-label={`${view.labels.title} ${view.number}`}
     >
       <Template view={view} />
+      {view.branded ? <p className="doc-made-with">Made with Invoice Maker</p> : null}
     </article>
   );
 }

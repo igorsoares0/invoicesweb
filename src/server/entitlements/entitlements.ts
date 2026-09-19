@@ -5,13 +5,11 @@ export function getEntitlements(plan: Plan): Entitlements {
   const definition = PLANS[plan];
   return {
     plan,
-    limits: {
-      invoicesPerMonth: definition.invoicesPerMonth,
-      openEstimates: definition.openEstimates,
-    },
+    limits: { invoicesPerMonth: definition.invoicesPerMonth },
     features: {
       templates: [...definition.templates],
       canUseCustomBranding: definition.customBranding,
+      hasBrandingMark: definition.brandingMark,
       canSendReminders: definition.reminders,
       canExportCsv: definition.csvExport,
     },

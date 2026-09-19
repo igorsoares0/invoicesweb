@@ -4,12 +4,12 @@ import { createBusinessSchema, updateBusinessSchema } from "@/lib/validation/bus
 import { toFieldErrors } from "@/lib/validation/errors";
 import { ApiError } from "@/server/api/errors";
 import type { BusinessContext } from "@/server/auth/types";
-import { getEntitlements } from "@/server/entitlements/entitlements";
 import { businessRepository } from "@/server/repositories/business-repository";
 import { estimateRepository } from "@/server/repositories/estimate-repository";
 import { invoiceRepository } from "@/server/repositories/invoice-repository";
 import { isPrismaError } from "@/server/repositories/prisma-errors";
 import { toBusinessDto } from "@/server/repositories/serializers";
+import { billingService } from "./billing-service";
 import { userService } from "./user-service";
 
 const ALREADY_EXISTS = "This account already has a business";
@@ -34,6 +34,8 @@ export const businessService = {
         // Invoices go out from the account email until the user sets a different one.
         email: user.email,
       });
+      // Onboarding is the one step every sign-up path goes through before the first invoice.
+      await billingService.startTrial(userId);
       return toBusinessDto(business);
     } catch (error) {
       if (isPrismaError(error, "P2002")) throw ApiError.conflict(ALREADY_EXISTS);
@@ -64,8 +66,7 @@ export const businessService = {
   async getMe(userId: string): Promise<MeDto> {
     const [user, business] = await Promise.all([userService.getById(userId), this.getForUser(userId)]);
     if (!user) throw ApiError.unauthorized();
-    // Billing arrives in phase 5; until then everyone is on the free plan.
-    const plan = "FREE" as const;
-    return { user, business, subscription: { plan, status: "ACTIVE" }, entitlements: getEntitlements(plan) };
+    const plan = business ? await billingService.summary({ userId, businessId: business.id }) : null;
+    return { user, business, plan };
   },
 };

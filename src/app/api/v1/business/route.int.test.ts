@@ -34,6 +34,20 @@ describe("/api/v1/business", () => {
     expect(json.data).not.toHaveProperty("userId");
   });
 
+  it("starts the 14-day Pro trial when onboarding finishes", async () => {
+    const user = await createUser();
+    signInAs(user.id);
+    const before = Date.now();
+
+    await callRoute(POST, { method: "POST", body: { name: "Alvorada Studio" } });
+
+    const { trialEndsAt } = await db.user.findUniqueOrThrow({ where: { id: user.id } });
+    const days = (trialEndsAt!.getTime() - before) / 86_400_000;
+    expect(days).toBeGreaterThan(13.99);
+    expect(days).toBeLessThan(14.01);
+    expect((await callRoute(getMe)).json.data.plan).toMatchObject({ plan: "PRO", source: "trial" });
+  });
+
   it("allows only one business per user", async () => {
     const { user } = await createAccount();
     signInAs(user.id);
@@ -109,8 +123,8 @@ describe("GET /api/v1/me", () => {
     expect(json.data).toMatchObject({
       user: { id: user.id, email: "ana@alvorada.studio" },
       business: null,
-      subscription: { plan: "FREE", status: "ACTIVE" },
-      entitlements: { plan: "FREE", limits: { invoicesPerMonth: 5 } },
+      // The plan's usage window needs a business (its timezone), so there is none yet.
+      plan: null,
     });
   });
 
@@ -121,6 +135,35 @@ describe("GET /api/v1/me", () => {
     const { json } = await callRoute(getMe);
 
     expect(json.data.business).toMatchObject({ id: business.id, name: "Alvorada Studio" });
+  });
+
+  it("reports the plan, where it comes from, and this month's usage", async () => {
+    const free = await createAccount({ plan: "FREE" });
+    signInAs(free.user.id);
+    expect((await callRoute(getMe)).json.data.plan).toMatchObject({
+      plan: "FREE",
+      source: "free",
+      canManage: false,
+      usage: { sent: 0, limit: 3 },
+      entitlements: { limits: { invoicesPerMonth: 3 }, features: { hasBrandingMark: true } },
+    });
+
+    const trial = await createAccount();
+    signInAs(trial.user.id);
+    const trialPlan = (await callRoute(getMe)).json.data.plan;
+    expect(trialPlan).toMatchObject({ plan: "PRO", source: "trial", usage: { limit: null } });
+    expect(new Date(trialPlan.trialEndsAt).getTime()).toBeGreaterThan(Date.now());
+
+    const pro = await createAccount({ plan: "PRO" });
+    signInAs(pro.user.id);
+    expect((await callRoute(getMe)).json.data.plan).toMatchObject({
+      plan: "PRO",
+      source: "subscription",
+      status: "ACTIVE",
+      interval: "MONTH",
+      canManage: true,
+      entitlements: { features: { hasBrandingMark: false } },
+    });
   });
 
   it("returns 401 when the session points at a deleted user", async () => {

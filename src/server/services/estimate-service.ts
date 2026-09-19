@@ -29,6 +29,7 @@ import { businessRepository } from "@/server/repositories/business-repository";
 import { estimateRepository, type EstimateDetail } from "@/server/repositories/estimate-repository";
 import { invoiceRepository, type Tx } from "@/server/repositories/invoice-repository";
 import { isPrismaError } from "@/server/repositories/prisma-errors";
+import { billingService } from "./billing-service";
 import { invoiceService } from "./invoice-service";
 
 export type ReplyBy = "client" | "you";
@@ -241,17 +242,18 @@ export const estimateService = {
         throw ApiError.validation({ expiryDate: ["The expiry date has already passed"] }, "Fix these before sending");
       }
 
-      const [business, client] = await Promise.all([
-        tx.business.findUniqueOrThrow({ where: { id: context.businessId } }),
-        tx.client.findUniqueOrThrow({ where: { id: detail.clientId! } }),
-      ]);
+      // Estimates never count toward the monthly limit, but Pro options still need Pro.
+      const { branded } = await billingService.assertSendAllowed(tx, context, detail, { countsTowardLimit: false });
+
+      const business = await tx.business.findUniqueOrThrow({ where: { id: context.businessId } });
+      const client = await tx.client.findUniqueOrThrow({ where: { id: detail.clientId! } });
       await tx.estimate.update({
         where: { id },
         data: {
           status: "SENT",
           sentAt: new Date(),
           publicToken: generatePublicToken("est"),
-          issuerSnapshot: issuerSnapshot(business) as unknown as Prisma.InputJsonValue,
+          issuerSnapshot: issuerSnapshot(business, branded) as unknown as Prisma.InputJsonValue,
           billToSnapshot: billToSnapshot(client) as unknown as Prisma.InputJsonValue,
         },
       });
@@ -398,10 +400,11 @@ export const estimateService = {
         data: { status: "CONVERTED", convertedAt: new Date(), convertedInvoiceId: invoice.id },
       });
       await estimateRepository.addEvent(tx, id, "CONVERTED", { invoiceId: invoice.id, invoiceNumber: invoice.number });
+      // Sent in the same transaction: if the plan refuses the send, nothing is converted.
+      if (send) await invoiceService.sendInTx(tx, context, invoice.id);
     });
 
-    const invoice = send ? await invoiceService.send(context, invoiceId) : await invoiceService.get(context, invoiceId);
-    return { invoice, estimate: await this.get(context, id) };
+    return { invoice: await invoiceService.get(context, invoiceId), estimate: await this.get(context, id) };
   },
 
   /** Numbers for the estimates overview (design c1), one currency at a time. */

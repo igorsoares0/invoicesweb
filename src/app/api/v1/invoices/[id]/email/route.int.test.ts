@@ -121,6 +121,21 @@ describe("POST /api/v1/invoices/:id/email", () => {
     expect(capturedEmails()[0].html).toContain(`/i/${json.data.invoice.publicToken}`);
   });
 
+  it("carries the Made with mark only when the plan does", async () => {
+    const { client } = await signedInAccount();
+    const draft = await readyDraft(client.id);
+    await sendEmail(draft.id);
+    expect(capturedEmails()[0].text).not.toContain("Made with Invoice Maker");
+
+    const free = await createAccount({ businessName: "Free Studio", plan: "FREE" });
+    signInAs(free.user.id);
+    const freeClient = await createClientRecord(free.business.id, { name: "Ana Ruiz", email: "billing@pineco.com" });
+    const freeDraft = await readyDraft(freeClient.id);
+    await sendEmail(freeDraft.id);
+    expect(capturedEmails()[1].text).toContain("Made with Invoice Maker");
+    expect(capturedEmails()[1].html).toContain("Made with Invoice Maker");
+  });
+
   it("fills the default subject and message when they are left out", async () => {
     const { client } = await signedInAccount();
     const draft = await readyDraft(client.id);

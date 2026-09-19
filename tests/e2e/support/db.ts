@@ -19,15 +19,23 @@ export function uniqueEmail(prefix: string) {
  * Creates a user (and optionally a business) straight in the database, so most specs start
  * signed-up without going through the rate-limited sign-up form.
  */
-export async function createAccount(options: { businessName?: string | null; email?: string } = {}) {
+/**
+ * Accounts start in the reverse trial, as they do after onboarding in production. Billing specs
+ * pass `plan: "FREE"` to start on the free plan.
+ */
+export async function createAccount(
+  options: { businessName?: string | null; email?: string; plan?: "TRIAL" | "FREE" } = {},
+) {
   const email = options.email ?? uniqueEmail("user");
   const userId = `e2e${randomUUID().replaceAll("-", "")}`;
   const passwordHash = await hash(TEST_PASSWORD, { memoryCost: 19_456, timeCost: 2, parallelism: 1 });
   const db = getPool();
+  const trialEndsAt = (options.plan ?? "TRIAL") === "TRIAL" ? new Date(Date.now() + 14 * 86_400_000) : null;
 
   await db.query(
-    `INSERT INTO "User" (id, email, "passwordHash", "createdAt", "updatedAt") VALUES ($1, $2, $3, now(), now())`,
-    [userId, email, passwordHash],
+    `INSERT INTO "User" (id, email, "passwordHash", "trialEndsAt", "createdAt", "updatedAt")
+     VALUES ($1, $2, $3, $4, now(), now())`,
+    [userId, email, passwordHash, trialEndsAt],
   );
   const businessName = options.businessName === undefined ? "Alvorada Studio" : options.businessName;
   const businessId = businessName ? `e2e${randomUUID().replaceAll("-", "")}` : null;
@@ -97,5 +105,25 @@ export async function expireEstimate(number: string, businessId: string) {
   await getPool().query(`UPDATE "Estimate" SET "expiryDate" = '2020-01-01' WHERE number = $1 AND "businessId" = $2`, [
     number,
     businessId,
+  ]);
+}
+
+/** Fills this month's quota: invoices already sent, stamped straight in the database. */
+export async function alreadySent(businessId: string, count: number) {
+  for (let i = 0; i < count; i += 1) {
+    await getPool().query(
+      `INSERT INTO "Invoice" (id, "businessId", sequence, number, status, "issueDate", "dueDate", currency, "sentAt", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, 'SENT', now(), now(), 'USD', now(), now(), now())`,
+      [id(), businessId, 900 + i, `INV-${900 + i}`],
+    );
+  }
+}
+
+/** Picks a template for a draft without going through the picker (tests of the send gate). */
+export async function setTemplate(businessId: string, number: string, template: string) {
+  await getPool().query(`UPDATE "Invoice" SET template = $3 WHERE "businessId" = $1 AND number = $2`, [
+    businessId,
+    number,
+    template,
   ]);
 }

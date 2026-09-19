@@ -23,7 +23,7 @@ export default async function AuthLayout({ children }: LayoutProps<"/">) {
             Send your first invoice in the next five minutes.
           </h1>
           <p className="max-w-md text-[15px] text-muted-foreground">
-            No card to start. Five invoices a month on the free plan, and the PDF looks the same as on Pro.
+            No card to start. 14 days of Pro, then free forever — three invoices a month.
           </p>
         </div>
         <ul className="flex flex-col gap-4">

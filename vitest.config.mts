@@ -2,8 +2,11 @@ import react from "@vitejs/plugin-react";
 import { config as loadEnv } from "dotenv";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { TEST_BILLING_ENV } from "./tests/setup/billing-env.mjs";
 
 loadEnv({ quiet: true });
+// Workers inherit this process's environment: no project may see a real Paddle key.
+Object.assign(process.env, TEST_BILLING_ENV);
 
 const emptyModule = fileURLToPath(new URL("./tests/setup/empty-module.ts", import.meta.url));
 
@@ -42,8 +45,12 @@ export default defineConfig({
           name: "integration",
           environment: "node",
           include: ["src/**/*.int.test.ts"],
-          // EMAIL_TRANSPORT is explicit: `.env` is loaded above, so a real key must never send.
-          env: { DATABASE_URL: process.env.DATABASE_URL_TEST ?? "", EMAIL_TRANSPORT: "capture" },
+          // Providers are pinned explicitly: `.env` is loaded above, so real keys must never be used.
+          env: {
+            DATABASE_URL: process.env.DATABASE_URL_TEST ?? "",
+            EMAIL_TRANSPORT: "capture",
+            ...TEST_BILLING_ENV,
+          },
           globalSetup: ["tests/setup/integration-global-setup.ts"],
           setupFiles: ["tests/setup/integration.ts"],
           // Tests share one database, so files must not run concurrently.

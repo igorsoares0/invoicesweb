@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { signIn } from "./support/auth";
 import { createAccount, createClient, emailsFor } from "./support/db";
 import { sentEstimate } from "./support/estimates";
+import { markAsSent, readyDraft } from "./support/invoices";
 
 test("works at phone width: tab bar, bottom sheets and card rows", async ({ page }) => {
   const account = await createAccount();
@@ -113,4 +114,18 @@ test("emails an invoice from a phone", async ({ page }) => {
 
   const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(scrollWidth).toBeLessThanOrEqual(390);
+});
+
+test("a Free invoice shows the Made with mark on the phone page", async ({ page, browser }) => {
+  const account = await createAccount({ plan: "FREE" });
+  await createClient(account.businessId, { name: "Vale Coffee", email: "ops@valecoffee.com" });
+  const desktop = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await signIn(desktop, account.email, account.password);
+  await readyDraft(desktop, "Vale Coffee");
+  const publicPath = await markAsSent(desktop);
+  await desktop.close();
+
+  await page.goto(publicPath);
+
+  await expect(page.getByText("Made with Invoice Maker").filter({ visible: true })).toBeVisible();
 });

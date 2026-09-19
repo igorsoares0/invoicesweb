@@ -21,6 +21,8 @@ export interface DocumentEmailInput {
   accentColor: string;
   /** Printed on invoices only, when the business filled it in. */
   paymentInstructions?: string | null;
+  /** Free-plan documents carry "Made with Invoice Maker", in the email as on the PDF. */
+  branded?: boolean;
 }
 
 /**
@@ -158,6 +160,9 @@ function DocumentEmail(input: DocumentEmailInput) {
                       Sent by {input.businessName}
                       {input.businessEmail ? ` · ${input.businessEmail}` : ""}
                     </p>
+                    {input.branded ? (
+                      <p style={{ margin: "8px 0 0", fontSize: "11.5px", color: "#a1a1aa" }}>Made with Invoice Maker</p>
+                    ) : null}
                   </td>
                 </tr>
               </tbody>
@@ -185,6 +190,7 @@ function documentEmailText(input: DocumentEmailInput): string {
     lines.push("", "How to pay:", input.paymentInstructions.trim());
   }
   lines.push("", `Sent by ${input.businessName}${input.businessEmail ? ` · ${input.businessEmail}` : ""}`);
+  if (input.branded) lines.push("Made with Invoice Maker");
   return lines.join("\n");
 }
 

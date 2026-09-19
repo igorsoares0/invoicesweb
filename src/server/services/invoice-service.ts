@@ -22,9 +22,11 @@ import { generatePublicToken } from "@/server/documents/public-token";
 import type { SendChannel } from "@/server/documents/send-channel";
 import { toInvoiceDto, toInvoiceListItemDto, toItemDto, toLineInput } from "@/server/invoices/serializers";
 import { billToSnapshot, issuerSnapshot } from "@/server/documents/snapshots";
+import { billingRepository } from "@/server/repositories/billing-repository";
 import { businessRepository } from "@/server/repositories/business-repository";
 import { invoiceRepository, type InvoiceDetail, type Tx } from "@/server/repositories/invoice-repository";
 import { isPrismaError } from "@/server/repositories/prisma-errors";
+import { billingService } from "./billing-service";
 
 const STATUS_MESSAGES: Record<InvoiceAction, string> = {
   edit: "Only drafts can be edited. Sent invoices keep what they were issued with.",
@@ -210,37 +212,45 @@ export const invoiceService = {
    * records how it left the building, so the history reads as one line per action (design b3).
    */
   async send(context: BusinessContext, id: string, channel: SendChannel = { channel: "manual" }): Promise<InvoiceDto> {
-    await db.$transaction(async (tx) => {
-      if (!(await invoiceRepository.lock(tx, context.businessId, id))) throw ApiError.notFound("Invoice");
-      const invoice = await loadDetail(context, id, tx);
-      assertCan(invoice, "send");
-
-      const problems = findIssueProblems({
-        clientId: invoice.clientId,
-        issueDate: toIsoDate(invoice.issueDate),
-        endDate: toIsoDate(invoice.dueDate),
-        items: invoice.items.map(toItemDto),
-      });
-      if (problems.length) throw ApiError.validation(problemsToFieldErrors(problems), "Fix these before sending");
-
-      const [business, client] = await Promise.all([
-        tx.business.findUniqueOrThrow({ where: { id: context.businessId } }),
-        tx.client.findUniqueOrThrow({ where: { id: invoice.clientId! } }),
-      ]);
-      await tx.invoice.update({
-        where: { id },
-        data: {
-          status: "SENT",
-          sentAt: new Date(),
-          publicToken: generatePublicToken(),
-          issuerSnapshot: issuerSnapshot(business) as unknown as Prisma.InputJsonValue,
-          billToSnapshot: billToSnapshot(client) as unknown as Prisma.InputJsonValue,
-          amountDue: invoice.total,
-        },
-      });
-      await invoiceRepository.addEvent(tx, id, "SENT", { ...channel });
-    });
+    await db.$transaction((tx) => this.sendInTx(tx, context, id, channel));
     return this.get(context, id);
+  },
+
+  /**
+   * The send transition, for callers that already hold a transaction (converting an estimate
+   * sends inside its own, so a refused send converts nothing). Locks the Business row before the
+   * invoice — the same order number reservation uses — then applies the plan's send gate.
+   */
+  async sendInTx(tx: Tx, context: BusinessContext, id: string, channel: SendChannel = { channel: "manual" }) {
+    await billingRepository.lockBusiness(tx, context.businessId);
+    if (!(await invoiceRepository.lock(tx, context.businessId, id))) throw ApiError.notFound("Invoice");
+    const invoice = await loadDetail(context, id, tx);
+    assertCan(invoice, "send");
+
+    const problems = findIssueProblems({
+      clientId: invoice.clientId,
+      issueDate: toIsoDate(invoice.issueDate),
+      endDate: toIsoDate(invoice.dueDate),
+      items: invoice.items.map(toItemDto),
+    });
+    if (problems.length) throw ApiError.validation(problemsToFieldErrors(problems), "Fix these before sending");
+
+    const { branded } = await billingService.assertSendAllowed(tx, context, invoice, { countsTowardLimit: true });
+
+    const business = await tx.business.findUniqueOrThrow({ where: { id: context.businessId } });
+    const client = await tx.client.findUniqueOrThrow({ where: { id: invoice.clientId! } });
+    await tx.invoice.update({
+      where: { id },
+      data: {
+        status: "SENT",
+        sentAt: new Date(),
+        publicToken: generatePublicToken(),
+        issuerSnapshot: issuerSnapshot(business, branded) as unknown as Prisma.InputJsonValue,
+        billToSnapshot: billToSnapshot(client) as unknown as Prisma.InputJsonValue,
+        amountDue: invoice.total,
+      },
+    });
+    await invoiceRepository.addEvent(tx, id, "SENT", { ...channel });
   },
 
   async duplicate(context: BusinessContext, id: string): Promise<InvoiceDto> {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { signInAs } from "@tests/setup/auth-state";
-import { createAccount, createClientRecord, lineInput } from "@tests/setup/db";
+import { createAccount, createClientRecord, createSubscription, lineInput, type TestPlan } from "@tests/setup/db";
 import { callRoute } from "@tests/setup/http";
 import { PATCH } from "@/app/api/v1/invoices/[id]/route";
 import { POST as cancel } from "@/app/api/v1/invoices/[id]/cancel/route";
@@ -12,8 +12,8 @@ import { GET as publicPdf } from "@/app/i/[token]/pdf/route";
 import { db } from "@/server/db";
 import { publicInvoiceService } from "./public-invoice-service";
 
-async function sentInvoice(dates?: { issueDate: string; dueDate: string }) {
-  const account = await createAccount({ businessName: "Alvorada Studio" });
+async function sentInvoice(dates?: { issueDate: string; dueDate: string }, plan: TestPlan = "TRIAL") {
+  const account = await createAccount({ businessName: "Alvorada Studio", plan });
   signInAs(account.user.id);
   await db.business.update({
     where: { id: account.business.id },
@@ -73,6 +73,22 @@ describe("publicInvoiceService.find", () => {
     const found = await publicInvoiceService.find(token);
 
     expect(JSON.stringify(found)).not.toContain("ceo@pineco.com");
+  });
+
+  it("shows the Made with mark on what Free sent, until the owner upgrades", async () => {
+    const { token, user } = await sentInvoice(undefined, "FREE");
+    expect((await publicInvoiceService.find(token))?.view.branded).toBe(true);
+
+    await createSubscription(user.id);
+
+    expect((await publicInvoiceService.find(token))?.view.branded).toBe(false);
+  });
+
+  it("never brands what was sent on Pro, even after a downgrade", async () => {
+    const { token, user } = await sentInvoice();
+    await db.user.update({ where: { id: user.id }, data: { trialEndsAt: new Date(Date.now() - 1000) } });
+
+    expect((await publicInvoiceService.find(token))?.view.branded).toBe(false);
   });
 
   it("labels overdue and partially paid invoices", async () => {

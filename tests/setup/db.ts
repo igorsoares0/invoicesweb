@@ -1,3 +1,4 @@
+import type { Prisma } from "@/generated/prisma/client";
 import type { BusinessContext } from "@/server/auth/types";
 import { hashPassword } from "@/server/auth/password";
 import { db } from "@/server/db";
@@ -8,7 +9,7 @@ export async function truncateAll() {
     throw new Error("Refusing to truncate: DATABASE_URL does not point at a *_test database.");
   }
   await db.$executeRawUnsafe(
-    'TRUNCATE TABLE "EmailLog", "EstimateEvent", "EstimateItem", "Estimate", "InvoiceEvent", "Payment", "InvoiceItem", "Invoice", "Product", "Client", "Business", "Account", "Session", "VerificationToken", "User" CASCADE',
+    'TRUNCATE TABLE "BillingEvent", "Subscription", "EmailLog", "EstimateEvent", "EstimateItem", "Estimate", "InvoiceEvent", "Payment", "InvoiceItem", "Invoice", "Product", "Client", "Business", "Account", "Session", "VerificationToken", "User" CASCADE',
   );
 }
 
@@ -26,14 +27,48 @@ export async function createUser(overrides: { email?: string; password?: string;
   });
 }
 
-/** A user with a business: the usual starting point for resource tests. */
-export async function createAccount(overrides: { businessName?: string } = {}) {
-  const user = await createUser();
+export type TestPlan = "TRIAL" | "FREE" | "PRO";
+
+/**
+ * A user with a business: the usual starting point for resource tests. Accounts start in the
+ * reverse trial, as they do in production; limit tests ask for `plan: "FREE"` explicitly.
+ */
+export async function createAccount(overrides: { businessName?: string; plan?: TestPlan } = {}) {
+  const plan = overrides.plan ?? "TRIAL";
+  let user = await createUser();
+  if (plan === "TRIAL") {
+    user = await db.user.update({ where: { id: user.id }, data: { trialEndsAt: new Date(Date.now() + 14 * 86_400_000) } });
+  }
+  if (plan === "PRO") await createSubscription(user.id);
   const business = await db.business.create({
     data: { userId: user.id, name: overrides.businessName ?? `Business of ${user.email}` },
   });
   const context: BusinessContext = { userId: user.id, businessId: business.id };
   return { user, business, context };
+}
+
+/** An active Paddle subscription, as the webhook would have stored it. */
+export function createSubscription(
+  userId: string,
+  overrides: Partial<Prisma.SubscriptionUncheckedCreateInput> = {},
+) {
+  const n = next();
+  return db.subscription.create({
+    data: {
+      userId,
+      plan: "PRO",
+      status: "ACTIVE",
+      provider: "PADDLE",
+      providerSubscriptionId: `sub_test_${n}`,
+      providerCustomerId: `ctm_test_${n}`,
+      providerPriceId: "pri_test_pro_monthly",
+      interval: "MONTH",
+      currentPeriodStart: new Date(Date.now() - 5 * 86_400_000),
+      currentPeriodEnd: new Date(Date.now() + 25 * 86_400_000),
+      nextBilledAt: new Date(Date.now() + 25 * 86_400_000),
+      ...overrides,
+    },
+  });
 }
 
 export function createClientRecord(businessId: string, data: { name: string; email?: string; company?: string }) {

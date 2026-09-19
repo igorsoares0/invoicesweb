@@ -51,6 +51,8 @@ async function main() {
       email: DEMO_EMAIL,
       name: "Ana Ribeiro",
       passwordHash: await hash(DEMO_PASSWORD, { memoryCost: 19_456, timeCost: 2, parallelism: 1 }),
+      // Mid-way through the reverse trial, so every Pro option works and the sidebar shows the countdown.
+      trialEndsAt: new Date(Date.now() + 9 * 86_400_000),
       business: {
         create: {
           name: "Alvorada Studio",

@@ -12,7 +12,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 Invoice and estimate SaaS for freelancers and small businesses. The product spec is `docs/Invoice Maker — Spec-Driven Development.md` (Portuguese); where the code deliberately differs from it, `docs/decisions.md` wins. The visual source of truth is `docs/design_handoff_invoice_maker_web/` (tokens in its README, screenshots a1–g5).
 
-Status: phases 1–4 (foundation, invoicing, estimates, email via Resend) are done. Next: phase 5 (billing and plan gating).
+Status: the web MVP's five phases are done (foundation, invoicing, estimates, email via Resend, billing via Paddle). Next: reminders, logo upload, reports, deploy; later the Flutter apps (spec §73+).
 
 ## Working rules
 
@@ -52,6 +52,7 @@ Status: phases 1–4 (foundation, invoicing, estimates, email via Resend) are do
 - **Money:** decimal.js via `src/lib/documents/math.ts`, rounded half-up per line. Money travels as strings. Business dates are `@db.Date` values handled as ISO strings, and "today" is always computed in the business's timezone (`todayIn` in `src/lib/dates.ts`).
 - **Statuses:** OVERDUE (invoices) and EXPIRED (estimates) are derived on read and never stored. Allowed actions per status live in `src/lib/invoices/status.ts` and `src/lib/estimates/status.ts`; PATCH never changes status.
 - **Invoices and estimates share one document layer:** `DOCUMENT_KINDS` (`src/features/documents/editor/kinds.ts`) configures the shared editor. `src/features/documents/document-templates.tsx` with `DOCUMENT_CSS` (`document-styles.ts`) is the single template source for the editor preview, the public pages and the PDF (`src/server/documents/render.ts`, headless Chromium). A new template or layout change must look right in all three.
-- **Plan limits** live in `src/server/entitlements/plans.ts` and are exposed through `/api/v1/me`. They are not enforced yet; enforcement comes with phase 5.
+- **Plans:** limits live in `src/server/entitlements/plans.ts`; `resolvePlan` (`src/server/entitlements/resolve.ts`) decides Free/Pro from the subscriptions and the reverse trial. The send gate is `billingService.assertSendAllowed`, called inside `invoiceService.sendInTx` (every path to SENT goes through it) under a Business-row lock. Never add a way to send that bypasses `sendInTx`. The client reads the plan through `usePlan()` (`PlanProvider` in the `(app)` layout).
+- **Paddle:** the sandbox account is shared with other products, so the webhook ignores events for prices that aren't ours, checkout passes its own `checkout.url`, and the server never creates Paddle customers. Test runners pin every `PADDLE_*` variable (`tests/setup/billing-env.mts`): no test may reach Paddle. The webhook is verified locally with the secret alone.
 - **Email:** `src/server/email/transport.ts` picks the transport — Resend with a key, `capture` (no network) when `EMAIL_TRANSPORT=capture`, none otherwise (`isEmailEnabled()` is threaded into client components as a prop). The send transition commits before the provider is called, so a failed email is an outcome (200 with `email.status: "FAILED"`), never an exception; each attempt is a row in `EmailLog`. Never let a test run reach the real provider: both runners set `EMAIL_TRANSPORT=capture`.
 - **Auth:** Auth.js v5 with JWT sessions. `src/proxy.ts` (Next 16's replacement for middleware) guards pages; public paths are listed in `src/lib/proxy-rules.ts`.

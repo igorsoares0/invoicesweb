@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__paddle-sandbox__execute",
+      "mcp__paddle-sandbox__search"
+    ]
+  }
+}

@@ -1,7 +1,10 @@
 import { config as loadEnv } from "dotenv";
 import { defineConfig, devices } from "@playwright/test";
+import { TEST_BILLING_ENV } from "./tests/setup/billing-env.mjs";
 
 loadEnv({ quiet: true });
+// The spec process and the built server both inherit this: no real Paddle key in a test run.
+Object.assign(process.env, TEST_BILLING_ENV);
 
 const PORT = 3100;
 const databaseUrl = process.env.DATABASE_URL_TEST;
@@ -43,7 +46,7 @@ export default defineConfig({
     timeout: 600_000,
     reuseExistingServer: false,
     // EMAIL_TRANSPORT is explicit: the built server inherits `.env`, and a real key must never send.
-    env: { DATABASE_URL: databaseUrl, EMAIL_TRANSPORT: "capture" },
+    env: { DATABASE_URL: databaseUrl, EMAIL_TRANSPORT: "capture", ...TEST_BILLING_ENV },
     stdout: "ignore",
     stderr: "pipe",
   },

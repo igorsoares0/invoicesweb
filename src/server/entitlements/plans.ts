@@ -1,32 +1,38 @@
 import type { Plan } from "@/lib/api-types";
+import { DOCUMENT_TEMPLATES } from "@/lib/validation/document";
 
-export const TEMPLATES = ["MODERN", "CLASSIC", "MINIMAL", "PROFESSIONAL", "BOLD"] as const;
+export const TEMPLATES = DOCUMENT_TEMPLATES;
 
 export interface PlanDefinition {
-  /** `null` means unlimited. */
+  /** Invoices *sent* per calendar month in the business's timezone. `null` means unlimited. */
   invoicesPerMonth: number | null;
-  openEstimates: number | null;
   templates: readonly (typeof TEMPLATES)[number][];
+  /** Choosing an accent colour other than the default. */
   customBranding: boolean;
+  /** Documents carry "Made with Invoice Maker". */
+  brandingMark: boolean;
   reminders: boolean;
   csvExport: boolean;
 }
 
-/** The single source of plan limits (spec §49). The UI reads these through /api/v1/me. */
+/**
+ * The single source of plan limits (spec §49, docs/decisions.md "Billing model"). Estimates,
+ * clients and items are unlimited on every plan, so they have no entry here.
+ */
 export const PLANS: Record<Plan, PlanDefinition> = {
   FREE: {
-    invoicesPerMonth: 5,
-    openEstimates: 3,
+    invoicesPerMonth: 3,
     templates: ["MODERN", "CLASSIC"],
     customBranding: false,
+    brandingMark: true,
     reminders: false,
     csvExport: false,
   },
   PRO: {
     invoicesPerMonth: null,
-    openEstimates: null,
     templates: TEMPLATES,
     customBranding: true,
+    brandingMark: false,
     reminders: true,
     csvExport: true,
   },

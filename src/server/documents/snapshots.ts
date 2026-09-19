@@ -14,6 +14,12 @@ export interface IssuerSnapshot {
   country: string | null;
   logoUrl: string | null;
   paymentInstructions: string | null;
+  /**
+   * Whether the issuer was on Free when the document was sent, so it carries "Made with Invoice
+   * Maker". Upgrading later removes the mark; downgrading never adds it to what was already sent.
+   * Missing on documents sent before billing existed, which read as unbranded.
+   */
+  branded?: boolean;
 }
 
 export interface BillToSnapshot {
@@ -29,8 +35,9 @@ export interface BillToSnapshot {
   country: string | null;
 }
 
-export function issuerSnapshot(business: Business): IssuerSnapshot {
+export function issuerSnapshot(business: Business, branded = false): IssuerSnapshot {
   return {
+    branded,
     name: business.name,
     email: business.email,
     phone: business.phone,

@@ -4,7 +4,7 @@ The product spec (`Invoice Maker — Spec-Driven Development.md`) describes what
 
 Add an entry whenever a phase makes a decision the spec doesn't cover. Section numbers (§) refer to the spec.
 
-Phases 1–4 are done (foundation, invoicing, estimates, email).
+Phases 1–5 are done (foundation, invoicing, estimates, email, billing).
 
 ## Structure and routes
 
@@ -32,7 +32,7 @@ Phases 1–4 are done (foundation, invoicing, estimates, email).
 - **Events:** besides the spec's examples (§12), invoices log `PAYMENT_REMOVED`, `LINK_REVOKED` and `DUPLICATED`. Estimates have their own `EstimateEvent` table: `CREATED`, `SENT`, `VIEWED`, `ACCEPTED`, `DECLINED`, `REOPENED`, `CONVERTED`, `LINK_REVOKED`, `DUPLICATED`. The `MARKED_PAID` example isn't a separate type: marking an invoice paid records a payment for the balance, which logs `PAYMENT_ADDED`.
 - **`EmailLog` (§13) carries four fields the spec doesn't list:** `recipients` (the design's To field takes several addresses, and `recipient` keeps the spec's singular reading as the first of them), `subject`, `attachedPdf`/`copyToSelf` (what the sender chose), and `error` (why it failed, in words meant for the user — the provider's own wording only reaches the logs). A database CHECK constraint enforces that a row belongs to exactly one document, an invoice or an estimate.
 - **`EmailStatus` starts at `QUEUED`**, which means the row exists but the provider hasn't answered. Sending is synchronous, so a row that stays QUEUED means the process died mid-send; it is never read as delivered. `DELIVERED`/`OPENED` wait for provider webhooks.
-- **Not yet in the schema:** `Subscription` (phase 5).
+- **Billing tables:** `Subscription` follows spec §14 but is keyed by the provider's subscription id, with a non-unique `userId`, plus `providerPriceId`, `interval`, `nextBilledAt` and `lastEventAt` (event ordering). `BillingEvent` records every webhook once (unique per provider and event id) with its outcome: applied, ignored or stale. `User.trialEndsAt` holds the reverse trial.
 
 ## Statuses and transitions
 
@@ -118,12 +118,55 @@ Phases 1–4 are done (foundation, invoicing, estimates, email).
 - **Not in this phase:** reminders (manual or scheduled) and the design's working "Send reminder" button; provider webhooks and the `DELIVERED`/`OPENED` states; the Settings → Email sub-page the design lists as "not yet designed" (defaults live in `src/lib/documents/email-text.ts` for now); the plan-limit modal, which needs the phase 5 gating.
 - **Test transport:** `EMAIL_TRANSPORT=capture` records emails instead of sending them and is set explicitly by both test runners, because they load `.env` and a real key would otherwise reach the provider. The transport also refuses to build a real client against a `*_test` database. E2E asserts through `EmailLog` — the capture buffer lives in the built server's own process.
 
+## Billing model (§14–§21, §49–§52)
+
+### The model
+
+- **Free forever, with a low limit — not a time-boxed trial.** Every invoice a free user sends carries the product to their client (email, public page, PDF), so the free plan is the main acquisition channel; a trial that expires would cut it off.
+- **The limit is 3 sent invoices per month**, down from the design's 5. It counts invoices *sent* (by email or "mark as sent"), never drafts, and resets on the 1st in the business's timezone. Cancelled invoices still count (they were sent); re-sending an email doesn't. Starting tight is deliberate: raising a limit later pleases users, lowering one angers them.
+- **Estimates are never limited**, on any plan. They aren't revenue and they are the first step of the funnel, so the design's "3 open estimates" on Free is gone. Clients and items are unlimited too.
+- **Free documents carry a "Made with Invoice Maker" mark** on the PDF, the email and the public page (desktop and phone); paying removes it. Free also keeps two templates (Modern, Classic) and the default accent colour.
+- **One paid plan (Pro): $9/month or $90/year** (two months free). In Paddle that is one product with two prices; the entitlement is the plan, never the billing interval (§14). More tiers wait until there are features worth a step up (online payments, reminders, recurring invoices, several businesses) and usage data shows where the limits belong.
+- **Reverse trial:** onboarding starts 14 days of Pro (`User.trialEndsAt`, set in `businessService.create`, the one step every sign-up path goes through). It's our own trial, with no card — not Paddle's. The account falls back to Free afterwards, never locked out. The first paid subscription ends the trial for good, so cancelling can't bring trial days back. Accounts created before billing have no trial.
+- **Email sending is not a Pro feature**, though spec §49 lists it as one (see Email above).
+
+### Who is Pro
+
+- `resolvePlan` (`src/server/entitlements/resolve.ts`) is the one rule: a subscription that is `ACTIVE`, `TRIALING` or `PAST_DUE`, or a trial that hasn't ended. `PAST_DUE` stays Pro while Paddle retries the payment; its dunning settings cancel or pause the subscription if retries run out. A scheduled cancellation keeps the subscription `ACTIVE` until the period ends, shown as "Pro until …". `CANCELED` and `PAUSED` are Free.
+- **Subscriptions are keyed by the provider's id** (`providerSubscriptionId`), and a user may have several over time (a resubscription, two checkouts at once); the strongest, newest one decides. A `userId @unique` design would let a late event for an old subscription overwrite the new one.
+
+### The gate on send (§21, §50)
+
+- **Where:** inside the send transaction (`invoiceService.sendInTx`), which every path to SENT goes through: mark as sent, emailing a draft, and converting an estimate with "send". Converting now sends inside the conversion's own transaction, so a refused send converts nothing — `decisions.md` promised that for invoices that fail validation, and the plan gate keeps the promise.
+- **Race-safe:** the Business row is locked (`FOR NO KEY UPDATE`, which excludes other sends and number reservations without blocking every foreign-key insert) **before** the invoice row — the same order number reservation uses — and the month is counted after the lock. Two simultaneous sends can't both take the last slot.
+- **The month is computed in SQL** (`date_trunc` in the business's timezone, converted back to UTC because `sentAt` is stored without a zone), with the current time as a parameter so tests can move it. Daylight-saving changes are covered by tests.
+- **Pro options** (a Pro template, or an accent colour other than the default on a template that paints with it — Modern and Professional; the others ignore the accent by design) are refused on send with `402 SUBSCRIPTION_REQUIRED`, field by field in `details`. The limit is `402 PLAN_LIMIT_REACHED`. Estimates never count toward the limit but still need Pro for Pro options. The editor keeps letting anyone pick Pro options, with a `PRO` chip, and the dialog offers "Use free options" (Modern or Classic, default colour) — the user asked for the gate on send rather than locks in the editor. Duplicating copies Pro options too; the gate catches them on send.
+
+### The "Made with" mark
+
+- **Frozen at send, lifted by upgrading.** The issuer snapshot records whether the document went out on Free (`issuerSnapshot.branded`), and it's shown as `branded && owner isn't Pro now`. Upgrading removes the mark from links already sent; downgrading never brands them afterwards ("Nothing you've already sent changes"). Drafts and the editor preview follow the current plan. The email is what it was when sent.
+- On the PDF the mark is absolutely positioned at the foot of the document, so it adds no height and never pushes a page over.
+
+### Paddle (§16, §51, §52)
+
+- **The sandbox account is shared with other products.** So: the webhook ignores (and records as `ignored`, answering 200) events whose items aren't one of our Pro prices; the checkout passes our own `/pricing` as `checkout.url` instead of relying on the account's default payment link; and the server never creates Paddle customers (emails are unique per account and another product may own one). The overlay finds or creates the customer from the prefilled email, and its id is stored from the subscription.
+- **Checkout:** `POST /api/v1/billing/checkout { interval }` creates the transaction on the server with `custom_data.userId`, so the browser can't change the price or the account. Paddle copies `custom_data` to the subscription. A second checkout while a subscription is live is refused (409) — it would charge twice.
+- **Sync:** after `checkout.completed` the page calls `POST /api/v1/billing/sync { transactionId }`, which checks the transaction belongs to the session's user and stores its subscription. Pro shows up without waiting for the webhook (or without one, in local development). Both paths apply the same idempotent upsert.
+- **Webhook:** `POST /api/webhooks/paddle` (§51), outside `withApi`. The signature (`ts:rawBody`, HMAC-SHA256, 5-minute tolerance) is verified locally with `node:crypto`, so the webhook needs only its secret, not an API key. The `BillingEvent` row is inserted first in the same transaction as the update, so a duplicate delivery fails on the unique key and answers 200, and a failure rolls everything back and answers 500 for Paddle to retry. Every `subscription.*` event carries the whole entity, so each one is a full-state upsert; one strictly older than the subscription's `lastEventAt` is ignored as `stale` (equal timestamps apply — `created` and `updated` often share one). The account is found through `custom_data.userId`, then the stored subscription, then the Paddle customer.
+- **Management** goes through Paddle's customer portal (`POST /api/v1/billing/portal` creates signed-in links: overview, update payment method, cancel). Receipts and the card live there. There is no "Switch to yearly" button: the portal doesn't switch intervals, and doing it through the API is left for later.
+- **Configuration:** billing needs `PADDLE_API_KEY` and both price ids; without them the upgrade button explains that billing isn't configured and the API answers `503 BILLING_DISABLED`. The client-side token and environment reach the browser as props, never as `NEXT_PUBLIC_*`, which would be baked into the test build. Both test runners pin every `PADDLE_*` variable (no API key, a known webhook secret, fake prices), so no test can reach Paddle whatever `.env` holds.
+
+### Screens
+
+- `/pricing` is signed-in only (the button opens a checkout for this account); a public pricing page waits for a marketing site. It lists only what exists: reminders, CSV export, the logo and "Restore purchase" (mobile) stay off until they're built.
+- The plan-limit dialog drops the design's "Copy public link" (a draft has no link) and the iOS/Android line (no apps yet). In the convert flow its way out is "Convert without sending". It opens over the send dialog, which keeps what was typed.
+- The sidebar card shows usage on Free (clamped at the limit after a downgrade), the countdown during the trial, and nothing on Pro; on a phone it lives in the "More" sheet. Settings gains "Plan & billing".
+
 ## Phasing
 
 - **Pulled into phase 2:** manual payments and "mark as sent", which publishes the public link without emailing it. Phase 4 added the email itself.
 - **Estimate decisions (phase 3):** estimates lock after sending, and conversion requires ACCEPTED.
-- **Plan limits (§49, §50):** defined in `src/server/entitlements/plans.ts` and returned by `/api/v1/me`, but not enforced; phase 5 adds enforcement. Until billing exists, everyone is on FREE with an ACTIVE status.
-- **Not built yet:** billing, subscriptions and webhooks (phase 5); payment reminders; logo upload; reports; global search; languages other than English.
+- **Not built yet:** payment reminders; logo upload; reports; CSV export; global search; switching billing interval in-app; mobile apps and RevenueCat (§17); languages other than English.
 
 ## Development environment
 

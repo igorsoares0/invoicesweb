@@ -19,12 +19,15 @@ model User {
   image         String?
   // Null for users who only ever signed in with an OAuth provider.
   passwordHash  String?
+  /// End of the reverse trial: 14 days of Pro from onboarding, then Free. Null means no trial.
+  trialEndsAt   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts Account[]
-  sessions Session[]
-  business Business?
+  accounts      Account[]
+  sessions      Session[]
+  business      Business?
+  subscriptions Subscription[]
 }
 
 model Account {
@@ -261,6 +264,8 @@ model Invoice {
   @@unique([businessId, sequence])
   @@index([businessId, status])
   @@index([businessId, dueDate])
+  /// The monthly send limit counts by sentAt.
+  @@index([businessId, sentAt])
   @@index([clientId])
 }
 
@@ -484,4 +489,77 @@ model EmailLog {
   @@index([businessId, createdAt])
   @@index([invoiceId, createdAt])
   @@index([estimateId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Billing (spec §14–§16, §51)
+// ---------------------------------------------------------------------------
+
+/// Access to the product, never the payment method (spec §14).
+enum Plan {
+  FREE
+  PRO
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  PAUSED
+  CANCELED
+}
+
+enum BillingProvider {
+  PADDLE
+  APPLE
+  GOOGLE
+}
+
+enum BillingInterval {
+  MONTH
+  YEAR
+}
+
+/// One row per provider subscription. A user can have several over time (resubscribing, or two
+/// checkouts at once), so the provider id is the key and `userId` is not unique.
+model Subscription {
+  id                     String             @id @default(cuid())
+  userId                 String
+  plan                   Plan
+  status                 SubscriptionStatus
+  provider               BillingProvider
+  providerSubscriptionId String?            @unique
+  providerCustomerId     String?
+  providerPriceId        String?
+  interval               BillingInterval?
+  /// Filled by the mobile apps (spec §14, §18).
+  revenueCatAppUserId    String?
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  nextBilledAt           DateTime?
+  cancelAtPeriodEnd      Boolean            @default(false)
+  /// occurred_at of the newest provider event applied, so late events can't undo newer state.
+  lastEventAt            DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([providerCustomerId])
+}
+
+/// Every provider webhook received, processed at most once (spec §51, §52).
+model BillingEvent {
+  id         String          @id @default(cuid())
+  provider   BillingProvider
+  eventId    String
+  type       String
+  occurredAt DateTime
+  /// applied, ignored (not ours, or no matching user) or stale (older than what's stored).
+  outcome    String
+  payload    Json
+  createdAt  DateTime        @default(now())
+
+  @@unique([provider, eventId])
 }

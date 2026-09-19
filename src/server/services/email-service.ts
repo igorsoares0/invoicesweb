@@ -11,6 +11,7 @@ import { ApiError, ErrorCode } from "@/server/api/errors";
 import { documentEmailLimiter } from "@/server/auth/rate-limit";
 import type { BusinessContext } from "@/server/auth/types";
 import { db } from "@/server/db";
+import { documentParties } from "@/server/documents/render";
 import { buildDocumentEmail } from "@/server/email/message";
 import { emailSender, getEmailTransport, type EmailAttachment } from "@/server/email/transport";
 import { toEmailLogDto } from "@/server/email/serializers";
@@ -121,6 +122,14 @@ export const emailService = {
       }
     }
 
+    // The mark follows the same rule as the PDF and the public page.
+    const snapshot = { status: true, issuerSnapshot: true, billToSnapshot: true, clientId: true, businessId: true } as const;
+    const stored =
+      kind === "invoice"
+        ? await db.invoice.findUniqueOrThrow({ where: { id }, select: snapshot })
+        : await db.estimate.findUniqueOrThrow({ where: { id }, select: snapshot });
+    const { branded } = await documentParties(stored);
+
     const { html, text: plain } = await buildDocumentEmail({
       kind,
       number: document.dto.number,
@@ -133,6 +142,7 @@ export const emailService = {
       message,
       accentColor: document.dto.color,
       paymentInstructions: business.paymentInstructions,
+      branded,
     });
 
     const sent = await transport.send({

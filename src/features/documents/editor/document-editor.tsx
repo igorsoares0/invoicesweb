@@ -38,6 +38,9 @@ import { LineGrid } from "./line-grid";
 import { PhoneLineSheet } from "./phone-line-sheet";
 import { SaveStatusText } from "./save-status";
 import { SendDialog, type SendEmailInput, type SendEmailOutcome } from "./send-dialog";
+import { usePlan } from "@/features/billing/plan-context";
+import { gateFromError, PlanLimitDialog, type PlanGate } from "@/features/billing/plan-limit-dialog";
+import { freeOptions } from "@/lib/billing/pro-options";
 import { AccentSwatches, TemplatePicker } from "./template-picker";
 import { DOCUMENT_KINDS, type EditableDocument } from "./kinds";
 import { useDocumentDraft } from "./use-document-draft";
@@ -79,6 +82,8 @@ export function DocumentEditor({
   const [clients, setClients] = useState(initialClients);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [gate, setGate] = useState<PlanGate | null>(null);
+  const planContext = usePlan();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [phoneTab, setPhoneTab] = useState<"edit" | "preview">("edit");
@@ -118,8 +123,10 @@ export function DocumentEditor({
         notes: draft.notes || null,
         terms: draft.terms || null,
         color: draft.color,
+        // The preview shows what the client would get on the current plan.
+        branded: planContext?.plan.entitlements.features.hasBrandingMark ?? false,
       }),
-    [client, draft, invoice.number, issuer, kind, lines, totals],
+    [client, draft, invoice.number, issuer, kind, lines, planContext, totals],
   );
 
   useEffect(() => {
@@ -177,6 +184,15 @@ export function DocumentEditor({
     link.click();
   }
 
+  /** A send the plan refused opens the limit dialog over the send dialog, which keeps what was typed. */
+  async function openGate(error: unknown): Promise<boolean> {
+    const refused = error instanceof ApiClientError ? gateFromError(error) : null;
+    if (!refused) return false;
+    await planContext?.refresh().catch(() => undefined);
+    setGate(refused);
+    return true;
+  }
+
   async function markSent(): Promise<string | null> {
     const saved = await flush();
     if (!saved) return "Save the draft first — some fields need fixing.";
@@ -187,12 +203,21 @@ export function DocumentEditor({
       router.refresh();
       return null;
     } catch (error) {
+      if (await openGate(error)) return null;
       return error instanceof ApiClientError ? error.message : `Couldn't send the ${labels.noun}`;
     }
   }
 
+  /** Swaps Pro options for their free equivalents and saves, so the next send goes through. */
+  async function switchToFreeOptions() {
+    const features = planContext?.plan.entitlements.features ?? { templates: ["MODERN", "CLASSIC"] };
+    update((current) => ({ ...current, ...freeOptions(current, features) }));
+    await flush();
+    setGate(null);
+  }
+
   /** Returns the attempt's outcome, or a message when the request itself was refused. */
-  async function sendEmail(input: SendEmailInput): Promise<SendEmailOutcome | string> {
+  async function sendEmail(input: SendEmailInput): Promise<SendEmailOutcome | string | null> {
     const saved = await flush();
     if (!saved) return "Save the draft first — some fields need fixing.";
     try {
@@ -206,6 +231,7 @@ export function DocumentEditor({
       }
       return email;
     } catch (error) {
+      if (await openGate(error)) return null;
       return error instanceof ApiClientError ? error.message : `Couldn't email the ${labels.noun}`;
     }
   }
@@ -658,6 +684,20 @@ export function DocumentEditor({
           emailEnabled={emailEnabled}
           onSendEmail={sendEmail}
           onMarkSent={markSent}
+        />
+      ) : null}
+      {gate ? (
+        <PlanLimitDialog
+          open
+          gate={gate}
+          plan={planContext?.plan ?? null}
+          onOpenChange={(open) => {
+            if (open) return;
+            // "Keep as draft": the draft stays exactly as it is, and so does the editor.
+            setGate(null);
+            setSendOpen(false);
+          }}
+          onUseFreeOptions={switchToFreeOptions}
         />
       ) : null}
       <ConfirmDeleteDialog

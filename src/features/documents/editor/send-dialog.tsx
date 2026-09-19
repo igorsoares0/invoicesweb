@@ -123,7 +123,8 @@ export function SendDialog({
   emailEnabled: boolean;
   /** A re-send: the number is assigned and the status won't change again. */
   alreadySent?: boolean;
-  onSendEmail: (input: SendEmailInput) => Promise<SendEmailOutcome | string>;
+  /** A string is an error to show; null means the caller took over (the plan-limit dialog). */
+  onSendEmail: (input: SendEmailInput) => Promise<SendEmailOutcome | string | null>;
   onMarkSent: () => Promise<string | null>;
 }) {
   const text = useMemo(() => ({ kind, number, clientName, businessName }), [kind, number, clientName, businessName]);
@@ -174,6 +175,7 @@ export function SendDialog({
     setFailure(null);
     const outcome = await onSendEmail({ to, subject, message, attachPdf, sendCopy });
     setPending(null);
+    if (outcome === null) return;
     if (typeof outcome === "string") {
       setError(outcome);
       return;

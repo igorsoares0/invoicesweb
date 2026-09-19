@@ -4,13 +4,15 @@ SaaS for freelancers and small businesses to create, send and track invoices and
 The product spec lives in [`docs/Invoice Maker — Spec-Driven Development.md`](docs/) and the
 high-fidelity design in [`docs/design_handoff_invoice_maker_web/`](docs/design_handoff_invoice_maker_web/README.md).
 
-**Status: phase 4 (email).** Accounts (email + password, Google), onboarding, business
+**Status: phase 5 (billing) — the web MVP is complete.** Accounts (email + password, Google), onboarding, business
 settings, clients and the items catalog (phase 1); invoices with server-side totals, continuous
 numbering, an autosaving editor, five PDF templates, public links, manual payments and the
 overview dashboard (phase 2); estimates that clients accept or decline from a public link,
 expire on their own and convert into invoices with prices locked (phase 3); sending invoices
 and estimates by email through Resend, with the PDF attached, a logged attempt per send and
-the result on the document's history (phase 4). Billing and plan limits follow in phase 5.
+the result on the document's history (phase 4); plans and billing through Paddle — Free with three sent
+invoices a month and a "Made with" mark, Pro at $9/month or $90/year, a 14-day Pro trial for new
+accounts, enforced on the server when a document is sent (phase 5).
 
 ## Stack
 
@@ -40,6 +42,17 @@ the address of your own Resend account** — verify a domain before emailing rea
 exercise the flow without a key, set `EMAIL_TRANSPORT=capture`: emails are logged in
 `EmailLog` and never leave the machine (the test runners set this themselves, and sending to
 `fail@capture.test` simulates a provider failure).
+
+Billing is disabled until `PADDLE_API_KEY`, `PADDLE_CLIENT_TOKEN` and both `PADDLE_PRICE_PRO_*` ids
+are set; plan limits apply either way. To try a real checkout in the Paddle sandbox:
+
+1. Create an API key and a client-side token in the Paddle dashboard and put them in `.env`. The
+   account needs a default payment link (any approved URL) before it can create transactions.
+2. `npm run dev`, then `ngrok http 3000`, and add a notification destination for
+   `https://<ngrok-host>/api/webhooks/paddle` with the `subscription.*` events. Put its secret in
+   `PADDLE_WEBHOOK_SECRET`. (Without the webhook, the page still activates Pro by syncing the
+   checkout; the webhook keeps cancellations and renewals in step.)
+3. Open `/pricing`, upgrade with the test card `4242 4242 4242 4242`, any future expiry, CVC `100`.
 
 PDFs are printed by headless Chromium (`playwright-core`). Locally, `npx playwright install chromium`
 provides it. The production image needs it too: `npx playwright install --with-deps chromium`.
@@ -88,6 +101,7 @@ src/
     services/          business rules and validation
     invoices/          snapshots, document rendering, public tokens
     email/             transport (Resend or capture), message template, base URL
+    billing/           Paddle configuration, webhook signatures, subscription mapping
     pdf/               Chromium renderer and embedded fonts
     repositories/      Prisma queries, always scoped to a business
     entitlements/      plan limits (single source of truth)
@@ -110,6 +124,9 @@ src/
 - **Estimates:** their own `EST-` sequence; only drafts are editable; `EXPIRED` is derived when
   reading; a reply is recorded once (by the client on the link, or by you) and conversion to an
   invoice happens only from `ACCEPTED`, under a row lock.
+- **Plans:** sending an invoice is where the plan is enforced: the monthly count and Pro-only
+  options are checked inside the send transaction, under a lock on the business, so every path
+  (mark as sent, email, convert and send) obeys it and two sends can't race past the limit.
 - **Email:** the send transition commits first, then the PDF and the provider call run outside
   any transaction. A provider failure is therefore an outcome, not an error: the document stays
   sent, the attempt is stored in `EmailLog`, and the history shows both lines. One user action
@@ -139,6 +156,11 @@ Responses follow `{ "data": … }`, `{ "data": [], "pagination": { page, limit, 
 | `GET` `POST` | `/api/v1/invoices/:id/payments` | `POST` accepts an `Idempotency-Key` header |
 | `DELETE` | `/api/v1/invoices/:id/payments/:paymentId` | |
 | `GET` | `/api/v1/dashboard` | `?currency=EUR`; never converts between currencies |
+| `GET` | `/api/v1/billing` | Plan summary: plan, where it comes from (subscription, trial, free), this month's usage |
+| `POST` | `/api/v1/billing/checkout` | `{ interval: "MONTH" \| "YEAR" }` → a Paddle transaction for the overlay; 409 when already subscribed |
+| `POST` | `/api/v1/billing/sync` | `{ transactionId }` after checkout: stores the subscription without waiting for the webhook |
+| `POST` | `/api/v1/billing/portal` | Signed-in links to Paddle's customer portal (overview, card, cancel) |
+| `POST` | `/api/webhooks/paddle` | Paddle notifications, verified with `PADDLE_WEBHOOK_SECRET`; each event is applied once |
 | `GET` | `/i/:token/pdf` | Public PDF, rate limited per IP |
 | `GET` `POST` | `/api/v1/estimates` | `?status=draft\|sent\|accepted\|declined\|expired\|converted&q&sort=number\|expiryDate\|issueDate\|total` |
 | `GET` `PATCH` `DELETE` | `/api/v1/estimates/:id` | `PATCH` and `DELETE` for drafts only |

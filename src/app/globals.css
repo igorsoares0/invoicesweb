@@ -42,6 +42,8 @@
   --success-border: #bbf7d0;
   --warning: #b45309;
   --warning-tint: #fffbeb;
+  --warning-border: #fed7aa;
+  --warning-ink: #92400e;
   --danger-tint: #fef2f2;
   --danger-tint-2: #fffafa;
   --danger-border: #fecaca;
@@ -83,6 +85,8 @@
   --color-success-border: var(--success-border);
   --color-warning: var(--warning);
   --color-warning-tint: var(--warning-tint);
+  --color-warning-border: var(--warning-border);
+  --color-warning-ink: var(--warning-ink);
   --color-danger-tint: var(--danger-tint);
   --color-danger-tint-2: var(--danger-tint-2);
   --color-danger-border: var(--danger-border);

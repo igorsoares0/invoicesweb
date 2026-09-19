@@ -84,20 +84,52 @@ export interface ProductDto {
 
 export interface Entitlements {
   plan: Plan;
-  limits: { invoicesPerMonth: number | null; openEstimates: number | null };
+  /** `null` means unlimited. Estimates, clients and items are never limited. */
+  limits: { invoicesPerMonth: number | null };
   features: {
     templates: string[];
     canUseCustomBranding: boolean;
+    /** Documents carry "Made with Invoice Maker". */
+    hasBrandingMark: boolean;
     canSendReminders: boolean;
     canExportCsv: boolean;
   };
 }
 
+export type SubscriptionStatus = "ACTIVE" | "TRIALING" | "PAST_DUE" | "PAUSED" | "CANCELED";
+export type BillingInterval = "MONTH" | "YEAR";
+
+/** Where the current plan comes from: a paid subscription, the reverse trial, or neither. */
+export type PlanSource = "subscription" | "trial" | "free";
+
+/** Everything the app shows about the plan: sidebar card, limit modal, billing settings. */
+export interface PlanSummaryDto {
+  plan: Plan;
+  source: PlanSource;
+  /** The subscription's own status, when there is one. */
+  status: SubscriptionStatus | null;
+  interval: BillingInterval | null;
+  trialEndsAt: string | null;
+  nextBilledAt: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  /** Whether the Paddle customer portal can be opened for this account. */
+  canManage: boolean;
+  usage: {
+    /** Invoices sent this month; may exceed the limit after a downgrade. */
+    sent: number;
+    limit: number | null;
+    /** First day of next month in the business's timezone (YYYY-MM-DD). */
+    resetsOn: string;
+  };
+  entitlements: Entitlements;
+}
+
 export interface MeDto {
   user: UserDto;
   business: BusinessDto | null;
-  subscription: { plan: Plan; status: "ACTIVE" };
-  entitlements: Entitlements;
+  /** Null until the account has a business (the usage window needs its timezone). */
+  plan: PlanSummaryDto | null;
 }
 
 export type InvoiceStatus = "DRAFT" | "SENT" | "VIEWED" | "PARTIALLY_PAID" | "PAID" | "CANCELLED";

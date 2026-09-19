@@ -31,6 +31,8 @@ export const DOCUMENT_CSS = /* css */ `
   overflow-wrap: anywhere;
 }
 .doc *, .doc *::before, .doc *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* Free-plan mark. Absolute, so it never adds height and never pushes a PDF onto a second page. */
+.doc .doc-made-with { position: absolute; right: 0; bottom: 7px; left: 0; text-align: center; font-family: var(--doc-sans); font-size: 8px; letter-spacing: .02em; color: #a1a1aa; }
 .doc table { width: 100%; border-collapse: collapse; }
 .doc thead { display: table-header-group; }
 .doc tr { break-inside: avoid; }
